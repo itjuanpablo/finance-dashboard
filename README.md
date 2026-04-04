@@ -1,4 +1,4 @@
-# 💰 Nome do Projeto
+# 💰 Finance Dashboard
 
 > Uma aplicação web para organização de finanças pessoais, com foco em clareza, controle, simplicidade e agilidade com uso da IA.
 
