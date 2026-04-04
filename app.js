@@ -904,29 +904,50 @@ function parseOFX(text) {
   return rows;
 }
 
-// ── CSV Auto-detect (Nubank, Inter, C6, Itaú, Bradesco, genérico) ──
+// ── CSV Auto-detect (Nubank, Inter, C6, Itaú, Bradesco, Mercado Pago, genérico) ──
 function parseCSVAuto(text) {
   const clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/^\uFEFF/, '');
   const lines = clean.split('\n').filter(l => l.trim());
   if (lines.length < 2) throw new Error('Arquivo CSV vazio ou inválido.');
 
-  const sep = lines[0].includes(';') ? ';' : ',';
-  const header = csvSplit(lines[0], sep).map(h => h.trim().toLowerCase().replace(/"/g, ''));
+  // Auto-detect separator — check all first lines for semicolons
+  const sample = lines.slice(0, 5).join('\n');
+  const sep = sample.includes(';') ? ';' : ',';
 
-  const idxDate   = findCol(header, ['data', 'date', 'data lançamento', 'data pagamento', 'data da compra']);
-  const idxDesc   = findCol(header, ['descrição', 'descricao', 'description', 'histórico', 'historico', 'title', 'memo', 'estabelecimento']);
-  const idxAmt    = findCol(header, ['valor', 'amount', 'value', 'montante', 'vlr']);
-  const idxType   = findCol(header, ['tipo', 'type', 'natureza']);
-  const idxCredit = findCol(header, ['crédito', 'credito', 'credit', 'entrada']);
-  const idxDebit  = findCol(header, ['débito', 'debito', 'debit', 'saída', 'saida']);
+  // Find the real header row — skip preamble/summary lines before the transaction table.
+  // Strategy: scan up to 10 lines for one whose columns contain date/description keywords.
+  const HEADER_KEYWORDS = ['data','date','descri','histor','memo','title','estabelecimento'];
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    const cols = csvSplit(lines[i], sep).map(h =>
+      h.trim().toLowerCase().replace(/"/g,'').replace(/^\uFEFF/,'')
+    );
+    if (cols.some(c => HEADER_KEYWORDS.some(k => c.includes(k)))) {
+      headerIdx = i;
+      break;
+    }
+  }
 
-  if (idxDate === -1 || idxDesc === -1) throw new Error('Não foi possível identificar colunas de data e descrição.');
+  const header = csvSplit(lines[headerIdx], sep).map(h =>
+    h.trim().toLowerCase().replace(/"/g,'').replace(/^\uFEFF/,'')
+  );
+
+  const idxDate   = findCol(header, ['data','date','data lançamento','data pagamento','data da compra']);
+  const idxDesc   = findCol(header, ['descricao','descrição','description','histórico','historico','title','memo','estabelecimento']);
+  const idxAmt    = findCol(header, ['transaction_net_amount','net_amount','valor','amount','value','montante','vlr']);
+  const idxType   = findCol(header, ['tipo','type','natureza']);
+  const idxCredit = findCol(header, ['crédito','credito','credit','entrada']);
+  const idxDebit  = findCol(header, ['débito','debito','debit','saída','saida']);
+
+  if (idxDate === -1 || idxDesc === -1)
+    throw new Error('Não foi possível identificar colunas de data e descrição.');
 
   const rows = [];
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = headerIdx + 1; i < lines.length; i++) {
     const cols = csvSplit(lines[i], sep).map(c => c.trim().replace(/^"|"$/g, ''));
     if (cols.length < 2 || !cols[idxDate]) continue;
 
+    // Date: dd/mm/yyyy, dd/mm/yy, yyyy-mm-dd
     let dateStr = cols[idxDate] || '';
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) dateStr = dateStr.split('/').reverse().join('-');
     else if (/^\d{2}\/\d{2}\/\d{2}$/.test(dateStr)) { const p = dateStr.split('/'); dateStr = `20${p[2]}-${p[1]}-${p[0]}`; }
@@ -934,13 +955,17 @@ function parseCSVAuto(text) {
 
     let amount = 0, type = 'expense';
     if (idxAmt !== -1) {
-      const raw = cols[idxAmt].replace(/\./g, '').replace(',', '.').replace(/[^0-9.\-]/g, '');
+      // Brazilian format: "1.234,56" → 1234.56
+      const raw = cols[idxAmt]
+        .replace(/\./g, '')    // remove thousand dot
+        .replace(',', '.')     // decimal comma → dot
+        .replace(/[^0-9.\-]/g, '');
       amount = parseFloat(raw) || 0;
       type = amount < 0 ? 'expense' : 'income';
       amount = Math.abs(amount);
     } else if (idxCredit !== -1 || idxDebit !== -1) {
       const cr = parseFloat((cols[idxCredit]||'').replace(/\./g,'').replace(',','.')) || 0;
-      const db = parseFloat((cols[idxDebit]||'').replace(/\./g,'').replace(',','.')) || 0;
+      const db = parseFloat((cols[idxDebit] ||'').replace(/\./g,'').replace(',','.')) || 0;
       if (db > 0) { amount = db; type = 'expense'; }
       else if (cr > 0) { amount = cr; type = 'income'; }
     }
@@ -948,11 +973,12 @@ function parseCSVAuto(text) {
 
     if (idxType !== -1) {
       const t = (cols[idxType]||'').toLowerCase();
-      type = (t.includes('créd') || t.includes('cred') || t.includes('receita') || t.includes('entrad')) ? 'income' : 'expense';
+      type = (t.includes('créd')||t.includes('cred')||t.includes('receita')||t.includes('entrad'))
+        ? 'income' : 'expense';
     }
 
     const desc = cols[idxDesc] || 'Sem descrição';
-    rows.push({ date: dateStr, desc, amount, type, cat: guessCategory(desc), cardId: cards[0]?.id || 1, _skip: false });
+    rows.push({ date: dateStr, desc: desc.trim(), amount, type, cat: guessCategory(desc), cardId: cards[0]?.id || 1, _skip: false });
   }
   return rows;
 }
