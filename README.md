@@ -2,7 +2,7 @@
 
 > Aplicação web de controle financeiro pessoal — 100% client-side, sem servidor, com sincronização via GitHub e importação inteligente de extratos por IA.
 
-[![Version](https://img.shields.io/badge/versão-1.0.0-blue)](#changelog)
+[![Version](https://img.shields.io/badge/versão-1.2.0-blue)](#changelog)
 [![Stack](https://img.shields.io/badge/stack-HTML%20%2F%20CSS%20%2F%20JS-yellow)](#tecnologias)
 [![License](https://img.shields.io/badge/licença-MIT-green)](#)
 
