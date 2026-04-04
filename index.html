@@ -16,6 +16,7 @@
     </div>
     <div class="topbar-right">
       <div class="nav-tabs">
+        <button class="nav-tab ai-tab" onclick="goPage('ia',this)">✦ Assistente IA</button>
         <button class="nav-tab active" onclick="goPage('dashboard',this)">Dashboard</button>
         <button class="nav-tab" onclick="goPage('lancamentos',this)">Lançamentos</button>
         <button class="nav-tab" onclick="goPage('recorrentes',this)">Fixas</button>
@@ -34,7 +35,43 @@
 
   <div id="alertsArea"></div>
 
-  <!-- DASHBOARD -->
+  <!-- ══ ASSISTENTE IA ══════════════════════════════════════════ -->
+  <div class="page" id="page-ia">
+    <div class="ai-setup">
+      <div class="ff" style="flex:1;min-width:260px;">
+        <label>Chave de API Anthropic (Claude)</label>
+        <input class="ai-key-input" type="password" id="apiKey"
+               placeholder="sk-ant-api03-..."
+               oninput="saveKey(this.value)" />
+      </div>
+      <span id="keyStatus"></span>
+      <a href="https://console.anthropic.com/settings/keys" target="_blank" class="link-sm">
+        Obter chave →
+      </a>
+    </div>
+
+    <div class="card ai-wrap">
+      <div class="suggestion-chips" id="chips">
+        <span class="chip" onclick="fillChip(this)">gastei R$50 no mercado hoje</span>
+        <span class="chip" onclick="fillChip(this)">recebi R$3.000 de salário</span>
+        <span class="chip" onclick="fillChip(this)">paguei R$120 na farmácia ontem</span>
+        <span class="chip" onclick="fillChip(this)">Uber R$32 agora</span>
+        <span class="chip" onclick="fillChip(this)">quanto gastei este mês?</span>
+        <span class="chip" onclick="fillChip(this)">quais minhas maiores despesas?</span>
+        <span class="chip" onclick="fillChip(this)">estou dentro das metas?</span>
+        <span class="chip" onclick="fillChip(this)">me dá um resumo financeiro</span>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <textarea class="chat-input" id="chatInput"
+          placeholder="Ex: gastei R$45 no almoço hoje, recebi freelance de R$800..."
+          onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ DASHBOARD ══════════════════════════════════════════════ -->
   <div class="page active" id="page-dashboard">
     <div class="metrics" id="metricsRow"></div>
     <div class="grid2">
@@ -53,12 +90,12 @@
     </div>
   </div>
 
-  <!-- LANÇAMENTOS -->
+  <!-- ══ LANÇAMENTOS ════════════════════════════════════════════ -->
   <div class="page" id="page-lancamentos">
     <div class="form-block">
       <div class="ff"><label>Data</label><input type="date" id="txDate" /></div>
-      <div class="ff"><label>Descrição</label><input type="text" id="txDesc" placeholder="Ex: Mercado" /></div>
-      <div class="ff"><label>Valor (R$)</label><input type="number" id="txAmount" placeholder="0,00" step="0.01" /></div>
+      <div class="ff"><label>Descrição</label><input type="text" id="txDesc" placeholder="Ex: Mercado" style="width:150px;" /></div>
+      <div class="ff"><label>Valor (R$)</label><input type="number" id="txAmount" step="0.01" style="width:90px;" /></div>
       <div class="ff"><label>Categoria</label><select id="txCat"></select></div>
       <div class="ff"><label>Tipo</label>
         <select id="txType">
@@ -67,7 +104,7 @@
         </select>
       </div>
       <div class="ff"><label>Cartão / Conta</label><select id="txCard"></select></div>
-      <button class="add-btn" onclick="addTransaction()">+ Lançar</button>
+      <button class="add-btn" onclick="addTxManual()">+ Lançar</button>
     </div>
     <div class="card">
       <div class="section-hd">
@@ -82,11 +119,11 @@
     </div>
   </div>
 
-  <!-- TRANSAÇÕES FIXAS -->
+  <!-- ══ FIXAS ══════════════════════════════════════════════════ -->
   <div class="page" id="page-recorrentes">
     <div class="form-block">
       <div class="ff"><label>Descrição</label><input type="text" id="recDesc" placeholder="Ex: Netflix" /></div>
-      <div class="ff"><label>Valor (R$)</label><input type="number" id="recAmount" placeholder="0,00" step="0.01" /></div>
+      <div class="ff"><label>Valor (R$)</label><input type="number" id="recAmount" step="0.01" style="width:90px;" /></div>
       <div class="ff"><label>Categoria</label><select id="recCat"></select></div>
       <div class="ff"><label>Tipo</label>
         <select id="recType">
@@ -94,65 +131,66 @@
           <option value="income">Receita</option>
         </select>
       </div>
-      <div class="ff"><label>Dia do mês</label><input type="number" id="recDay" min="1" max="31" placeholder="Ex: 5" /></div>
+      <div class="ff"><label>Dia do mês</label><input type="number" id="recDay" min="1" max="31" placeholder="5" style="width:70px;" /></div>
       <div class="ff"><label>Cartão / Conta</label><select id="recCard"></select></div>
       <button class="add-btn" onclick="addRecurring()">+ Adicionar</button>
     </div>
     <div class="grid2">
       <div class="card">
-        <div class="card-title">Transações fixas cadastradas</div>
+        <div class="card-title">Transações fixas</div>
         <div id="recurringList"></div>
       </div>
       <div class="card">
-        <div class="card-title">Resumo de fixas</div>
+        <div class="card-title">Resumo fixas</div>
         <div id="recurringSummary"></div>
       </div>
     </div>
-    <button class="add-btn full-btn" onclick="applyRecurring()">Lançar fixas deste mês automaticamente</button>
+    <button class="add-btn full-btn" onclick="applyRecurring()">
+      Lançar fixas deste mês automaticamente
+    </button>
   </div>
 
-  <!-- METAS -->
+  <!-- ══ METAS ══════════════════════════════════════════════════ -->
   <div class="page" id="page-metas">
     <div class="form-block">
       <div class="ff"><label>Categoria</label><select id="goalCat"></select></div>
-      <div class="ff"><label>Tipo de meta</label>
+      <div class="ff"><label>Tipo</label>
         <select id="goalType">
           <option value="expense">Limite de gasto</option>
           <option value="income">Meta de receita</option>
         </select>
       </div>
-      <div class="ff"><label>Valor (R$)</label><input type="number" id="goalAmt" placeholder="0,00" /></div>
+      <div class="ff"><label>Valor (R$)</label><input type="number" id="goalAmt" style="width:110px;" /></div>
       <button class="add-btn" onclick="saveGoal()">Salvar meta</button>
     </div>
     <div class="grid2">
       <div class="card">
-        <div class="card-title">Metas de gasto — limite mensal</div>
+        <div class="card-title">Limites de gasto</div>
         <div id="goalsExpense"></div>
       </div>
       <div class="card">
-        <div class="card-title">Metas de receita — alvo mensal</div>
+        <div class="card-title">Metas de receita</div>
         <div id="goalsIncome"></div>
       </div>
     </div>
     <div class="card" style="margin-top:12px;">
-      <div class="card-title">Alertas por email quando meta estourar</div>
+      <div class="card-title">Alertas por email</div>
       <div class="email-box">
-        <p>Informe seu email para receber um alerta quando um limite de gasto for ultrapassado.</p>
+        <p>Receba um alerta quando um limite for ultrapassado.</p>
         <div class="email-row">
           <input type="email" id="alertEmail" placeholder="seuemail@exemplo.com" />
-          <button class="add-btn" onclick="saveEmail()">Salvar email</button>
+          <button class="add-btn" onclick="saveEmail()">Salvar</button>
           <span id="emailStatus"></span>
         </div>
       </div>
-      <p class="hint">O alerta abre um email pré-preenchido automaticamente ao lançar um gasto acima do limite.</p>
     </div>
   </div>
 
-  <!-- CATEGORIAS -->
+  <!-- ══ CATEGORIAS ════════════════════════════════════════════ -->
   <div class="page" id="page-categorias">
     <div class="form-block">
-      <div class="ff"><label>Nome da categoria</label><input type="text" id="catName" placeholder="Ex: Pets" /></div>
-      <div class="ff"><label>Ícone (emoji)</label><input type="text" id="catIcon" placeholder="🐾" maxlength="2" style="width:70px;" /></div>
+      <div class="ff"><label>Nome</label><input type="text" id="catName" placeholder="Ex: Pets" /></div>
+      <div class="ff"><label>Ícone</label><input type="text" id="catIcon" placeholder="🐾" maxlength="2" style="width:65px;" /></div>
       <div class="ff"><label>Cor</label>
         <select id="catColorSel">
           <option value="#BA7517,#FAEEDA,#412402">Âmbar</option>
@@ -165,7 +203,7 @@
           <option value="#639922,#EAF3DE,#173404">Lima</option>
         </select>
       </div>
-      <button class="add-btn" onclick="addCategory()">+ Criar categoria</button>
+      <button class="add-btn" onclick="addCategory()">+ Criar</button>
     </div>
     <div class="card">
       <div class="card-title">Todas as categorias</div>
@@ -173,7 +211,7 @@
     </div>
   </div>
 
-  <!-- CARTÕES -->
+  <!-- ══ CARTÕES ════════════════════════════════════════════════ -->
   <div class="page" id="page-cartoes">
     <div class="form-block">
       <div class="ff"><label>Nome</label><input type="text" id="cardName" placeholder="Ex: Nubank" /></div>
@@ -208,13 +246,13 @@
     </div>
   </div>
 
-  <!-- EXPORTAR -->
+  <!-- ══ EXPORTAR ══════════════════════════════════════════════ -->
   <div class="page" id="page-exportar">
     <div class="form-block">
-      <div class="ff"><label>De</label><input type="date" id="expFrom" /></div>
-      <div class="ff"><label>Até</label><input type="date" id="expTo" /></div>
+      <div class="ff"><label>De</label><input type="date" id="expFrom" style="width:130px;" /></div>
+      <div class="ff"><label>Até</label><input type="date" id="expTo" style="width:130px;" /></div>
       <div class="ff"><label>Formato</label>
-        <select id="expFormat">
+        <select id="expFormat" style="width:90px;">
           <option value="csv">CSV (Excel)</option>
           <option value="json">JSON</option>
         </select>
@@ -230,6 +268,8 @@
 </div><!-- .app -->
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="data.js"></script>
+<script src="ai.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
