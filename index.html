@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finanças Pessoais — Juan Pablo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div>
+      <h1>Finanças Pessoais</h1>
+      <span class="subtitle">Juan Pablo Ladeira</span>
+    </div>
+    <div class="topbar-right">
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="goPage('dashboard',this)">Dashboard</button>
+        <button class="nav-tab" onclick="goPage('lancamentos',this)">Lançamentos</button>
+        <button class="nav-tab" onclick="goPage('recorrentes',this)">Fixas</button>
+        <button class="nav-tab" onclick="goPage('metas',this)">Metas</button>
+        <button class="nav-tab" onclick="goPage('categorias',this)">Categorias</button>
+        <button class="nav-tab" onclick="goPage('cartoes',this)">Cartões</button>
+        <button class="nav-tab" onclick="goPage('exportar',this)">Exportar</button>
+      </div>
+      <div class="month-nav">
+        <button onclick="changeMonth(-1)">&#8249;</button>
+        <span class="month-label" id="monthLabel"></span>
+        <button onclick="changeMonth(1)">&#8250;</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="alertsArea"></div>
+
+  <!-- DASHBOARD -->
+  <div class="page active" id="page-dashboard">
+    <div class="metrics" id="metricsRow"></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Gastos por categoria</div>
+        <div id="catBars"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Evolução mensal (6 meses)</div>
+        <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Últimas transações</div>
+      <div id="recentTx"></div>
+    </div>
+  </div>
+
+  <!-- LANÇAMENTOS -->
+  <div class="page" id="page-lancamentos">
+    <div class="form-block">
+      <div class="ff"><label>Data</label><input type="date" id="txDate" /></div>
+      <div class="ff"><label>Descrição</label><input type="text" id="txDesc" placeholder="Ex: Mercado" /></div>
+      <div class="ff"><label>Valor (R$)</label><input type="number" id="txAmount" placeholder="0,00" step="0.01" /></div>
+      <div class="ff"><label>Categoria</label><select id="txCat"></select></div>
+      <div class="ff"><label>Tipo</label>
+        <select id="txType">
+          <option value="expense">Gasto</option>
+          <option value="income">Receita</option>
+        </select>
+      </div>
+      <div class="ff"><label>Cartão / Conta</label><select id="txCard"></select></div>
+      <button class="add-btn" onclick="addTransaction()">+ Lançar</button>
+    </div>
+    <div class="card">
+      <div class="section-hd">
+        <div class="tab-row" style="margin-bottom:0;border:none;">
+          <button class="tab active" onclick="setTab('all',this)">Todos</button>
+          <button class="tab" onclick="setTab('expense',this)">Gastos</button>
+          <button class="tab" onclick="setTab('income',this)">Receitas</button>
+        </div>
+        <input type="text" id="searchInput" placeholder="Buscar..." oninput="renderTxList()" class="search-input" />
+      </div>
+      <div id="txList" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- TRANSAÇÕES FIXAS -->
+  <div class="page" id="page-recorrentes">
+    <div class="form-block">
+      <div class="ff"><label>Descrição</label><input type="text" id="recDesc" placeholder="Ex: Netflix" /></div>
+      <div class="ff"><label>Valor (R$)</label><input type="number" id="recAmount" placeholder="0,00" step="0.01" /></div>
+      <div class="ff"><label>Categoria</label><select id="recCat"></select></div>
+      <div class="ff"><label>Tipo</label>
+        <select id="recType">
+          <option value="expense">Gasto</option>
+          <option value="income">Receita</option>
+        </select>
+      </div>
+      <div class="ff"><label>Dia do mês</label><input type="number" id="recDay" min="1" max="31" placeholder="Ex: 5" /></div>
+      <div class="ff"><label>Cartão / Conta</label><select id="recCard"></select></div>
+      <button class="add-btn" onclick="addRecurring()">+ Adicionar</button>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Transações fixas cadastradas</div>
+        <div id="recurringList"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Resumo de fixas</div>
+        <div id="recurringSummary"></div>
+      </div>
+    </div>
+    <button class="add-btn full-btn" onclick="applyRecurring()">Lançar fixas deste mês automaticamente</button>
+  </div>
+
+  <!-- METAS -->
+  <div class="page" id="page-metas">
+    <div class="form-block">
+      <div class="ff"><label>Categoria</label><select id="goalCat"></select></div>
+      <div class="ff"><label>Tipo de meta</label>
+        <select id="goalType">
+          <option value="expense">Limite de gasto</option>
+          <option value="income">Meta de receita</option>
+        </select>
+      </div>
+      <div class="ff"><label>Valor (R$)</label><input type="number" id="goalAmt" placeholder="0,00" /></div>
+      <button class="add-btn" onclick="saveGoal()">Salvar meta</button>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Metas de gasto — limite mensal</div>
+        <div id="goalsExpense"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Metas de receita — alvo mensal</div>
+        <div id="goalsIncome"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <div class="card-title">Alertas por email quando meta estourar</div>
+      <div class="email-box">
+        <p>Informe seu email para receber um alerta quando um limite de gasto for ultrapassado.</p>
+        <div class="email-row">
+          <input type="email" id="alertEmail" placeholder="seuemail@exemplo.com" />
+          <button class="add-btn" onclick="saveEmail()">Salvar email</button>
+          <span id="emailStatus"></span>
+        </div>
+      </div>
+      <p class="hint">O alerta abre um email pré-preenchido automaticamente ao lançar um gasto acima do limite.</p>
+    </div>
+  </div>
+
+  <!-- CATEGORIAS -->
+  <div class="page" id="page-categorias">
+    <div class="form-block">
+      <div class="ff"><label>Nome da categoria</label><input type="text" id="catName" placeholder="Ex: Pets" /></div>
+      <div class="ff"><label>Ícone (emoji)</label><input type="text" id="catIcon" placeholder="🐾" maxlength="2" style="width:70px;" /></div>
+      <div class="ff"><label>Cor</label>
+        <select id="catColorSel">
+          <option value="#BA7517,#FAEEDA,#412402">Âmbar</option>
+          <option value="#1D9E75,#E1F5EE,#085041">Verde</option>
+          <option value="#185FA5,#E6F1FB,#042C53">Azul</option>
+          <option value="#E24B4A,#FCEBEB,#501313">Vermelho</option>
+          <option value="#D4537E,#FBEAF0,#4B1528">Rosa</option>
+          <option value="#7F77DD,#EEEDFE,#26215C">Roxo</option>
+          <option value="#888780,#F1EFE8,#2C2C2A">Cinza</option>
+          <option value="#639922,#EAF3DE,#173404">Lima</option>
+        </select>
+      </div>
+      <button class="add-btn" onclick="addCategory()">+ Criar categoria</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Todas as categorias</div>
+      <div id="catList"></div>
+    </div>
+  </div>
+
+  <!-- CARTÕES -->
+  <div class="page" id="page-cartoes">
+    <div class="form-block">
+      <div class="ff"><label>Nome</label><input type="text" id="cardName" placeholder="Ex: Nubank" /></div>
+      <div class="ff"><label>Tipo</label>
+        <select id="cardType">
+          <option value="credit">Crédito</option>
+          <option value="debit">Débito</option>
+          <option value="pix">Pix/Conta</option>
+        </select>
+      </div>
+      <div class="ff"><label>Cor</label>
+        <select id="cardColor">
+          <option value="#185FA5">Azul</option>
+          <option value="#1D9E75">Verde</option>
+          <option value="#D85A30">Coral</option>
+          <option value="#7F77DD">Roxo</option>
+          <option value="#888780">Cinza</option>
+          <option value="#BA7517">Âmbar</option>
+        </select>
+      </div>
+      <button class="add-btn" onclick="addCard()">+ Adicionar</button>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Seus cartões e contas</div>
+        <div id="cardsList"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Gastos por cartão — este mês</div>
+        <div class="chart-wrap"><canvas id="cardChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPORTAR -->
+  <div class="page" id="page-exportar">
+    <div class="form-block">
+      <div class="ff"><label>De</label><input type="date" id="expFrom" /></div>
+      <div class="ff"><label>Até</label><input type="date" id="expTo" /></div>
+      <div class="ff"><label>Formato</label>
+        <select id="expFormat">
+          <option value="csv">CSV (Excel)</option>
+          <option value="json">JSON</option>
+        </select>
+      </div>
+      <button class="add-btn" onclick="exportData()">Exportar</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Resumo do período</div>
+      <div id="exportSummary"></div>
+    </div>
+  </div>
+
+</div><!-- .app -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
