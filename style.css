@@ -265,6 +265,12 @@ body {
   width: 140px;
 }
 
+.ff select {
+  width: auto;
+  min-width: 140px;
+  max-width: 200px;
+}
+
 .ff input:focus,
 .ff select:focus {
   outline: none;
@@ -748,4 +754,47 @@ body {
 @keyframes slideUp {
   from { opacity:0; transform: translateY(12px); }
   to   { opacity:1; transform: translateY(0); }
+}
+
+/* ---- RESPONSIVE IMPROVEMENTS ---- */
+
+/* Form block wraps cleanly on mobile */
+@media (max-width: 768px) {
+  body { padding: 10px; }
+
+  .topbar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .topbar-right { flex-direction: column; align-items: flex-start; width: 100%; }
+
+  .nav-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  .nav-tab { flex-shrink: 0; }
+
+  .month-nav { align-self: flex-start; }
+
+  .form-block { gap: 10px; }
+  .ff { width: 100%; }
+  .ff input,
+  .ff select { width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
+
+  .add-btn:not(.full-btn) { width: 100%; margin-top: 2px; }
+
+  .section-hd { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .section-hd > div { width: 100%; }
+  .search-input { width: 100% !important; }
+
+  .grid2 { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(2, 1fr); }
+
+  .modal-box { max-height: 92vh; margin: 0 4px; }
+
+  .import-stats { grid-template-columns: repeat(3, 1fr); }
+
+  /* Transaction list tweaks */
+  .tx-name { font-size: 12px; }
+  .tx-amount { font-size: 12px; }
+}
+
+@media (max-width: 400px) {
+  .metrics { grid-template-columns: 1fr 1fr; }
+  .metric-value { font-size: 15px; }
+  .import-stats { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 }

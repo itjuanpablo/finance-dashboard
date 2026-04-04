@@ -711,12 +711,27 @@ if (alertEmail) document.getElementById('alertEmail').value = alertEmail;
 document.getElementById('expFrom').addEventListener('change', renderExportSummary);
 document.getElementById('expTo').addEventListener('change', renderExportSummary);
 
+// ─── API Key (para importação PDF) ────────────────────────────────────────────
+
+let anthropicApiKey = load('jpfin_anthropic_key', '');
+
+function saveApiKey() {
+  anthropicApiKey = (document.getElementById('anthropicKey').value || '').trim();
+  save('jpfin_anthropic_key', anthropicApiKey);
+  document.getElementById('apiKeyStatus').textContent = anthropicApiKey ? '✓ Salva' : '';
+}
+
 // ─── Importar Extrato ─────────────────────────────────────────────────────────
 
 let importRows = []; // parsed rows pending confirmation
 
 function openImportModal() {
   document.getElementById('importModal').style.display = 'flex';
+  document.getElementById('pdfApiKeyBox').style.display = 'block';
+  if (anthropicApiKey) {
+    document.getElementById('anthropicKey').value = anthropicApiKey;
+    document.getElementById('apiKeyStatus').textContent = '✓ Salva';
+  }
   requestNotificationPermission();
 }
 
@@ -728,6 +743,7 @@ function closeImportModal() {
 function resetImport() {
   importRows = [];
   document.getElementById('importPreview').style.display = 'none';
+  document.getElementById('pdfProcessing').style.display = 'none';
   document.getElementById('importFile').value = '';
   const dz = document.getElementById('dropZone');
   if (dz) dz.style.display = '';
@@ -751,10 +767,14 @@ function handleImportFile(input) {
 }
 
 function processImportFile(file) {
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith('.pdf')) {
+    processPDFImport(file);
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e => {
     const text = e.target.result;
-    const lower = file.name.toLowerCase();
     try {
       importRows = lower.endsWith('.ofx') ? parseOFX(text) : parseCSVAuto(text);
       if (!importRows.length) { showToast('Nenhuma transação encontrada no arquivo.', 'warn'); return; }
@@ -764,6 +784,108 @@ function processImportFile(file) {
     }
   };
   reader.readAsText(file, 'UTF-8');
+}
+
+// ── PDF Import via Claude API ──
+async function processPDFImport(file) {
+  const key = anthropicApiKey || (document.getElementById('anthropicKey').value || '').trim();
+  if (!key) {
+    showToast('Informe sua chave da API Anthropic para importar PDFs.', 'warn', 6000);
+    document.getElementById('pdfApiKeyBox').style.display = 'block';
+    return;
+  }
+
+  // Show processing state
+  document.getElementById('dropZone').style.display = 'none';
+  document.getElementById('pdfProcessing').style.display = 'block';
+  document.getElementById('pdfStatusMsg').textContent = 'Lendo o PDF...';
+
+  try {
+    // Convert PDF to base64
+    const base64 = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(',')[1]);
+      r.onerror = () => rej(new Error('Falha ao ler arquivo'));
+      r.readAsDataURL(file);
+    });
+
+    document.getElementById('pdfStatusMsg').textContent = 'Enviando para a IA analisar...';
+
+    const catList = catNames().join(', ');
+    const prompt = `Você é um extrator de dados financeiros. Analise este extrato bancário em PDF e extraia TODAS as transações.
+
+Retorne SOMENTE um array JSON válido, sem markdown, sem explicações, sem texto antes ou depois.
+Formato de cada objeto:
+{
+  "date": "YYYY-MM-DD",
+  "desc": "descrição da transação",
+  "amount": 99.99,
+  "type": "expense" ou "income"
+}
+
+Regras:
+- type = "expense" para débitos/compras/saídas/pagamentos
+- type = "income" para créditos/depósitos/entradas/receitas  
+- amount sempre positivo
+- Se a data não tiver ano, use o ano mais provável baseado no documento
+- Inclua TODAS as transações visíveis, sem omitir nenhuma
+- desc: use a descrição original do extrato, sem cortar`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        max_tokens: 4096,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Erro da API: ${response.status}`);
+    }
+
+    document.getElementById('pdfStatusMsg').textContent = 'Processando resultado...';
+
+    const data = await response.json();
+    const rawText = data.content.map(b => b.text || '').join('').trim();
+
+    // Parse JSON — strip any accidental markdown fences
+    const jsonStr = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+    const parsed = JSON.parse(jsonStr);
+
+    if (!Array.isArray(parsed) || !parsed.length) throw new Error('Nenhuma transação encontrada no PDF.');
+
+    importRows = parsed.map(r => ({
+      date: r.date || todayStr(),
+      desc: String(r.desc || 'Sem descrição'),
+      amount: Math.abs(parseFloat(r.amount) || 0),
+      type: r.type === 'income' ? 'income' : 'expense',
+      cat: guessCategory(r.desc || ''),
+      cardId: cards[0]?.id || 1,
+      _skip: false
+    })).filter(r => r.amount > 0);
+
+    document.getElementById('pdfProcessing').style.display = 'none';
+    renderImportPreview();
+
+  } catch (err) {
+    document.getElementById('pdfProcessing').style.display = 'none';
+    document.getElementById('dropZone').style.display = '';
+    showToast('Erro ao processar PDF: ' + err.message, 'danger', 8000);
+  }
 }
 
 // ── OFX Parser ──

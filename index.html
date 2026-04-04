@@ -61,13 +61,32 @@
         <button class="tx-del" onclick="closeImportModal()" style="font-size:18px;">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="hint" style="margin-bottom:12px;">Aceita arquivos <b>CSV</b> (Nubank, Inter, C6, Itaú, Bradesco) e <b>OFX</b> (padrão bancário). Linhas duplicadas são ignoradas automaticamente.</p>
+        <p class="hint" style="margin-bottom:12px;">Aceita <b>CSV</b> (Nubank, Inter, C6, Itaú, Bradesco), <b>OFX</b> e <b>PDF</b> (extrato bancário — usa IA para extrair automaticamente).</p>
+
+        <div id="pdfApiKeyBox" style="display:none;margin-bottom:12px;">
+          <div style="background:var(--blue-bg);color:var(--blue-text);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;margin-bottom:8px;">
+            🤖 Para importar PDF, informe sua chave da API Anthropic. Ela fica salva localmente no seu browser.
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="password" id="anthropicKey" placeholder="sk-ant-..." style="flex:1;height:33px;padding:0 10px;border:0.5px solid var(--border-md);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font-size:13px;font-family:var(--font);" />
+            <button class="add-btn" onclick="saveApiKey()" style="white-space:nowrap;">Salvar chave</button>
+            <span id="apiKeyStatus" style="font-size:12px;color:var(--green);"></span>
+          </div>
+        </div>
+
         <div class="import-drop-zone" id="dropZone" onclick="document.getElementById('importFile').click()">
           <div class="import-drop-icon">📂</div>
           <div class="import-drop-text">Clique ou arraste o arquivo aqui</div>
-          <div class="hint">.csv ou .ofx</div>
-          <input type="file" id="importFile" accept=".csv,.ofx,.txt" style="display:none;" onchange="handleImportFile(this)" />
+          <div class="hint">.csv · .ofx · .pdf</div>
+          <input type="file" id="importFile" accept=".csv,.ofx,.txt,.pdf" style="display:none;" onchange="handleImportFile(this)" />
         </div>
+
+        <div id="pdfProcessing" style="display:none;text-align:center;padding:24px 0;">
+          <div style="font-size:28px;margin-bottom:10px;">🤖</div>
+          <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:6px;">Analisando extrato com IA...</div>
+          <div style="font-size:12px;color:var(--text-secondary);" id="pdfStatusMsg">Enviando PDF para processamento</div>
+        </div>
+
         <div id="importPreview" style="display:none;">
           <div class="import-stats" id="importStats"></div>
           <div class="import-mapping" id="importMapping"></div>
