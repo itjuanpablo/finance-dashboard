@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fluxo — Finanças Pessoais</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f1f2f6;
+    --border: #e6e8ef;
+    --text: #17181c;
+    --muted: #71768a;
+    --accent: #5b5ef4;
+    --accent-soft: rgba(91, 94, 244, .10);
+    --green: #16a34a;
+    --red: #dc2626;
+    --amber: #d97706;
+    --shadow: 0 1px 2px rgba(20,22,35,.05), 0 8px 24px -12px rgba(20,22,35,.12);
+    --radius: 14px;
+  }
+  html.dark {
+    --bg: #0e0f13;
+    --surface: #16171e;
+    --surface-2: #1d1f28;
+    --border: #262833;
+    --text: #e9eaf0;
+    --muted: #8a8fa3;
+    --accent: #7b7ef7;
+    --accent-soft: rgba(123, 126, 247, .14);
+    --green: #4ade80;
+    --red: #f87171;
+    --amber: #fbbf24;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    transition: background .25s, color .25s;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+
+  /* ── Header ─────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0; margin-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
+  .logo-mark {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #9d6ef4);
+    display: grid; place-items: center; color: #fff; font-size: 15px; font-weight: 800;
+  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .month-pill {
+    font-size: 13px; color: var(--muted); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 99px; padding: 7px 14px;
+  }
+  .theme-toggle {
+    width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface); cursor: pointer; font-size: 16px;
+    display: grid; place-items: center; transition: transform .15s;
+  }
+  .theme-toggle:hover { transform: scale(1.06); }
+
+  /* ── Upload zone ────────────────────────── */
+  .dropzone {
+    border: 1.5px dashed var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 34px 24px; text-align: center;
+    cursor: pointer; transition: border-color .2s, background .2s;
+    margin-bottom: 28px; position: relative; overflow: hidden;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+  .dropzone-icon {
+    width: 46px; height: 46px; margin: 0 auto 12px; border-radius: 13px;
+    background: var(--accent-soft); color: var(--accent);
+    display: grid; place-items: center; font-size: 21px;
+  }
+  .dropzone h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; letter-spacing: -.01em; }
+  .dropzone p { font-size: 13px; color: var(--muted); }
+  .dropzone p b { color: var(--accent); font-weight: 600; }
+  .dropzone input { display: none; }
+  .progress-bar {
+    position: absolute; left: 0; bottom: 0; height: 3px; width: 0%;
+    background: linear-gradient(90deg, var(--accent), #9d6ef4);
+    transition: width .3s ease; border-radius: 0 3px 3px 0;
+  }
+
+  /* ── Summary cards ──────────────────────── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
+  }
+  .card-label { font-size: 12.5px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .card-value { font-size: 25px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .card-value.pos { color: var(--green); }
+  .card-value.neg { color: var(--red); }
+  .card-sub { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  /* ── Main grid ──────────────────────────── */
+  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  .panel-head {
+    padding: 18px 20px 0; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  .panel-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+
+  /* ── Donut ──────────────────────────────── */
+  .donut-wrap { position: relative; width: 210px; margin: 18px auto 6px; }
+  .donut-center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; }
+  .donut-center .t { font-size: 20px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .donut-center .s { font-size: 11.5px; color: var(--muted); }
+  svg .seg { transition: opacity .15s, stroke-width .15s; cursor: pointer; }
+  svg .seg.dim { opacity: .25; }
+  .legend { padding: 10px 20px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 9px; font-size: 13px;
+    padding: 7px 10px; border-radius: 9px; cursor: pointer; transition: background .15s;
+  }
+  .legend-item:hover { background: var(--surface-2); }
+  .legend-item .name { flex: 1; }
+  .legend-item .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .legend-item .pct { color: var(--muted); font-size: 12px; width: 38px; text-align: right; }
+
+  /* ── Table ──────────────────────────────── */
+  .filters { display: flex; gap: 10px; padding: 14px 20px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .search {
+    flex: 1; min-width: 180px; display: flex; align-items: center; gap: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 12px;
+  }
+  .search input {
+    flex: 1; border: 0; background: transparent; outline: 0;
+    color: var(--text); font-size: 13.5px; font-family: inherit;
+  }
+  select.control {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 8px 10px; font-size: 13px; font-family: inherit; cursor: pointer; outline: 0;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); font-weight: 600; padding: 12px 20px; border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 13px 20px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background .12s; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr.new-row { animation: flash 1.8s ease; }
+  @keyframes flash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+  .desc { font-weight: 500; }
+  .desc small { display: block; color: var(--muted); font-weight: 400; font-size: 11.5px; margin-top: 2px; }
+  .amount { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .amount.in { color: var(--green); }
+  .amount.out { color: var(--text); }
+  .badge-select {
+    appearance: none; -webkit-appearance: none; border: 1px solid transparent;
+    border-radius: 99px; padding: 4px 22px 4px 10px; font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit; outline: 0;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+    transition: border-color .15s;
+  }
+  .badge-select:hover { border-color: var(--border); }
+  .empty { padding: 40px; text-align: center; color: var(--muted); font-size: 13.5px; }
+
+  /* ── Toast ──────────────────────────────── */
+  #toasts { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 99; }
+  .toast {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 13px 18px; font-size: 13.5px; box-shadow: var(--shadow);
+    display: flex; align-items: center; gap: 10px; animation: slideIn .3s ease;
+    max-width: 340px;
+  }
+  .toast .ico { font-size: 16px; }
+  @keyframes slideIn { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo"><div class="logo-mark">F</div>Fluxo</div>
+    <div class="header-right">
+      <span class="month-pill" id="monthPill"></span>
+      <button class="theme-toggle" id="themeBtn" title="Alternar tema">◐</button>
+    </div>
+  </header>
+
+  <div class="dropzone" id="dropzone">
+    <div class="dropzone-icon">⇪</div>
+    <h3>Arraste seus extratos aqui</h3>
+    <p>PDF, OFX ou CSV — ou <b>clique para selecionar</b>. As transações são lançadas e categorizadas automaticamente.</p>
+    <input type="file" id="fileInput" multiple accept=".pdf,.ofx,.csv">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-label"><span class="dot" style="background:var(--green)"></span>Entradas do mês</div>
+      <div class="card-value pos" id="cardIn">—</div>
+      <div class="card-sub" id="cardInSub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label"><span class="dot" style="background:var(--red)"></span>Saídas do mês</div>
+      <div class="card-value neg" id="cardOut">—</div>
+      <div class="card-sub" id="cardOutSub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label"><span class="dot" style="background:var(--accent)"></span>Saldo do mês</div>
+      <div class="card-value" id="cardBal">—</div>
+      <div class="card-sub">entradas − saídas</div>
+    </div>
+    <div class="card">
+      <div class="card-label"><span class="dot" style="background:var(--amber)"></span>Projeção de gastos</div>
+      <div class="card-value" id="cardProj">—</div>
+      <div class="card-sub" id="cardProjSub"></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-head"><h2>Gastos por categoria</h2></div>
+      <div class="donut-wrap">
+        <svg id="donut" width="210" height="210" viewBox="0 0 210 210"></svg>
+        <div class="donut-center">
+          <div><div class="t" id="donutTotal"></div><div class="s">total gasto</div></div>
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head" style="padding-bottom:14px">
+        <h2>Transações <span style="color:var(--muted);font-weight:400;font-size:13px" id="txCount"></span></h2>
+      </div>
+      <div class="filters">
+        <div class="search">🔍<input type="text" id="searchInput" placeholder="Buscar por descrição…"></div>
+        <select class="control" id="catFilter"><option value="">Todas as categorias</option></select>
+        <select class="control" id="typeFilter">
+          <option value="">Entradas e saídas</option>
+          <option value="out">Só saídas</option>
+          <option value="in">Só entradas</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th style="text-align:right">Valor</th></tr></thead>
+          <tbody id="txBody"></tbody>
+        </table>
+        <div class="empty" id="emptyState" style="display:none">Nenhuma transação encontrada.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+// ─── Estado ──────────────────────────────────────────────
+const CATEGORIES = {
+  'Alimentação':  '#f97316',
+  'Transporte':   '#3b82f6',
+  'Moradia':      '#8b5cf6',
+  'Lazer':        '#ec4899',
+  'Saúde':        '#14b8a6',
+  'Assinaturas':  '#eab308',
+  'Renda':        '#22c55e',
+  'A revisar':    '#94a3b8',
+};
+
+let transactions = [
+  { id: 1,  date: '2026-07-03', desc: 'PIX RECEBIDO - SALARIO EMPRESA XYZ', cat: 'Renda',       amount:  6400.00, src: 'nubank.ofx' },
+  { id: 2,  date: '2026-07-03', desc: 'SUPERMERCADO PAO DE ACUCAR',         cat: 'Alimentação', amount:  -412.37, src: 'nubank.ofx' },
+  { id: 3,  date: '2026-07-02', desc: 'UBER *TRIP',                          cat: 'Transporte',  amount:   -23.90, src: 'fatura-06.pdf' },
+  { id: 4,  date: '2026-07-02', desc: 'NETFLIX.COM',                         cat: 'Assinaturas', amount:   -55.90, src: 'fatura-06.pdf' },
+  { id: 5,  date: '2026-07-01', desc: 'ALUGUEL REF 07/2026',                 cat: 'Moradia',     amount: -1850.00, src: 'nubank.ofx' },
+  { id: 6,  date: '2026-07-01', desc: 'IFOOD *RESTAURANTE SABOR',            cat: 'Alimentação', amount:   -68.50, src: 'fatura-06.pdf' },
+  { id: 7,  date: '2026-06-30', desc: 'DROGARIA SAO PAULO',                  cat: 'Saúde',       amount:   -94.20, src: 'fatura-06.pdf' },
+  { id: 8,  date: '2026-06-29', desc: 'POSTO SHELL BR-060',                  cat: 'Transporte',  amount:  -180.00, src: 'itau.csv' },
+  { id: 9,  date: '2026-06-28', desc: 'CINEMARK GOIANIA',                    cat: 'Lazer',       amount:   -76.00, src: 'fatura-06.pdf' },
+  { id: 10, date: '2026-06-28', desc: 'SPOTIFY',                             cat: 'Assinaturas', amount:   -21.90, src: 'fatura-06.pdf' },
+  { id: 11, date: '2026-06-27', desc: 'TRANSF PIX JOSE M ***',               cat: 'A revisar',   amount:  -250.00, src: 'itau.csv' },
+  { id: 12, date: '2026-06-26', desc: 'PADARIA STELLA MARIS',                cat: 'Alimentação', amount:   -32.80, src: 'itau.csv' },
+  { id: 13, date: '2026-06-25', desc: 'CEMIG ENERGIA 06/2026',               cat: 'Moradia',     amount:  -212.44, src: 'itau.csv' },
+  { id: 14, date: '2026-06-24', desc: 'AMAZON BR MARKETPLACE',               cat: 'A revisar',   amount:  -149.90, src: 'fatura-06.pdf' },
+  { id: 15, date: '2026-06-23', desc: 'PIX RECEBIDO - FREELANCE DESIGN',     cat: 'Renda',       amount:   850.00, src: 'nubank.ofx' },
+  { id: 16, date: '2026-06-22', desc: 'ACADEMIA SMARTFIT',                   cat: 'Saúde',       amount:  -119.90, src: 'fatura-06.pdf' },
+];
+
+const NEW_TX_POOL = [
+  { desc: '99 POP *CORRIDA',              cat: 'Transporte',  amount:  -18.40 },
+  { desc: 'RESTAURANTE COCO BAMBU',       cat: 'Alimentação', amount: -156.00 },
+  { desc: 'STEAM GAMES',                  cat: 'Lazer',       amount:  -89.90 },
+  { desc: 'MERCADO LIVRE *VENDEDOR',      cat: 'A revisar',   amount: -215.30 },
+  { desc: 'FARMACIA PAGUE MENOS',         cat: 'Saúde',       amount:  -47.65 },
+  { desc: 'ESTACIONAMENTO SHOPPING',      cat: 'Transporte',  amount:  -15.00 },
+  { desc: 'PIX RECEBIDO - REEMBOLSO ANA', cat: 'Renda',       amount:  120.00 },
+];
+
+let nextId = 17;
+let activeCat = null; // destaque no donut
+
+// ─── Utilidades ──────────────────────────────────────────
+const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtDate = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}`; };
+const $ = id => document.getElementById(id);
+
+function toast(msg, icon = '✓') {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span class="ico">${icon}</span><span>${msg}</span>`;
+  $('toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = 0; el.style.transition = 'opacity .4s'; setTimeout(() => el.remove(), 400); }, 3600);
+}
+
+// ─── Resumo ──────────────────────────────────────────────
+function renderSummary() {
+  const month = '2026-07';
+  const inMonth = transactions.filter(t => t.date.startsWith(month));
+  const totIn  = inMonth.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  const totOut = inMonth.filter(t => t.amount < 0).reduce((s, t) => s - t.amount, 0);
+  const bal = totIn - totOut;
+
+  const today = 4, daysInMonth = 31;
+  const proj = totOut / today * daysInMonth;
+
+  $('cardIn').textContent  = fmtBRL(totIn);
+  $('cardOut').textContent = fmtBRL(totOut);
+  $('cardBal').textContent = fmtBRL(bal);
+  $('cardBal').className = 'card-value ' + (bal >= 0 ? 'pos' : 'neg');
+  $('cardProj').textContent = fmtBRL(proj);
+  $('cardInSub').textContent  = `${inMonth.filter(t => t.amount > 0).length} lançamentos`;
+  $('cardOutSub').textContent = `${inMonth.filter(t => t.amount < 0).length} lançamentos`;
+  $('cardProjSub').textContent = `ritmo atual × ${daysInMonth} dias`;
+}
+
+// ─── Donut ───────────────────────────────────────────────
+function renderDonut() {
+  const spent = {};
+  transactions.filter(t => t.amount < 0).forEach(t => {
+    spent[t.cat] = (spent[t.cat] || 0) - t.amount;
+  });
+  const entries = Object.entries(spent).sort((a, b) => b[1] - a[1]);
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+
+  const R = 82, C = 2 * Math.PI * R, cx = 105, cy = 105, gap = 2.5;
+  let offset = 0;
+  const svg = $('donut');
+  svg.innerHTML = '';
+
+  entries.forEach(([cat, val]) => {
+    const frac = val / total;
+    const len = Math.max(frac * C - gap, 1);
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', cx); circle.setAttribute('cy', cy); circle.setAttribute('r', R);
+    circle.setAttribute('fill', 'none');
+    circle.setAttribute('stroke', CATEGORIES[cat] || '#999');
+    circle.setAttribute('stroke-width', activeCat === cat ? 22 : 18);
+    circle.setAttribute('stroke-dasharray', `${len} ${C - len}`);
+    circle.setAttribute('stroke-dashoffset', -offset);
+    circle.setAttribute('stroke-linecap', 'round');
+    circle.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+    circle.classList.add('seg');
+    if (activeCat && activeCat !== cat) circle.classList.add('dim');
+    circle.addEventListener('click', () => { activeCat = activeCat === cat ? null : cat; renderDonut(); });
+    svg.appendChild(circle);
+    offset += frac * C;
+  });
+
+  $('donutTotal').textContent = activeCat && spent[activeCat] != null
+    ? fmtBRL(spent[activeCat]) : fmtBRL(total);
+  document.querySelector('.donut-center .s').textContent = activeCat || 'total gasto';
+
+  const legend = $('legend');
+  legend.innerHTML = '';
+  entries.forEach(([cat, val]) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.style.opacity = activeCat && activeCat !== cat ? .4 : 1;
+    item.innerHTML = `<span class="dot" style="background:${CATEGORIES[cat]}"></span>
+      <span class="name">${cat}</span>
+      <span class="val">${fmtBRL(val)}</span>
+      <span class="pct">${(val / total * 100).toFixed(0)}%</span>`;
+    item.addEventListener('click', () => { activeCat = activeCat === cat ? null : cat; renderDonut(); });
+    legend.appendChild(item);
+  });
+}
+
+// ─── Tabela ──────────────────────────────────────────────
+function badgeStyle(cat) {
+  const c = CATEGORIES[cat] || '#999';
+  return `background:${c}22; color:${c};` + (cat === 'A revisar' ? 'outline:1.5px dashed ' + c + '55;' : '');
+}
+
+function renderTable() {
+  const q = $('searchInput').value.trim().toLowerCase();
+  const fc = $('catFilter').value;
+  const ft = $('typeFilter').value;
+
+  const rows = transactions
+    .filter(t => (!q || t.desc.toLowerCase().includes(q)))
+    .filter(t => (!fc || t.cat === fc))
+    .filter(t => (!ft || (ft === 'in' ? t.amount > 0 : t.amount < 0)))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+
+  const body = $('txBody');
+  body.innerHTML = '';
+  rows.forEach(t => {
+    const tr = document.createElement('tr');
+    if (t.isNew) tr.classList.add('new-row');
+    const opts = Object.keys(CATEGORIES)
+      .map(c => `<option ${c === t.cat ? 'selected' : ''}>${c}</option>`).join('');
+    tr.innerHTML = `
+      <td style="color:var(--muted);white-space:nowrap">${fmtDate(t.date)}</td>
+      <td class="desc">${t.desc}<small>${t.src}</small></td>
+      <td><select class="badge-select" style="${badgeStyle(t.cat)}" data-id="${t.id}">${opts}</select></td>
+      <td class="amount ${t.amount > 0 ? 'in' : 'out'}">${t.amount > 0 ? '+' : ''}${fmtBRL(t.amount)}</td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('.badge-select').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const tx = transactions.find(t => t.id == e.target.dataset.id);
+      const old = tx.cat;
+      tx.cat = e.target.value;
+      tx.isNew = false;
+      renderAll();
+      if (old === 'A revisar') {
+        const kw = tx.desc.split(' ')[0];
+        toast(`Regra criada: "${kw}" → ${tx.cat}. Próximas importações serão automáticas.`, '🧠');
+      }
+    });
+  });
+
+  $('emptyState').style.display = rows.length ? 'none' : 'block';
+  $('txCount').textContent = `· ${rows.length}`;
+}
+
+function renderAll() { renderSummary(); renderDonut(); renderTable(); }
+
+// ─── Upload simulado ─────────────────────────────────────
+function simulateImport(fileNames) {
+  const bar = $('progressBar');
+  const label = fileNames.length ? fileNames.join(', ') : 'extrato-julho.ofx';
+  toast(`Processando ${label}…`, '⏳');
+  let p = 0;
+  const iv = setInterval(() => {
+    p += 12 + Math.random() * 18;
+    bar.style.width = Math.min(p, 100) + '%';
+    if (p >= 100) {
+      clearInterval(iv);
+      setTimeout(() => { bar.style.width = '0%'; }, 500);
+
+      const howMany = 2 + Math.floor(Math.random() * 3);
+      const picks = [...NEW_TX_POOL].sort(() => Math.random() - .5).slice(0, howMany);
+      let review = 0;
+      picks.forEach((p, i) => {
+        if (p.cat === 'A revisar') review++;
+        transactions.unshift({
+          id: nextId++, date: '2026-07-0' + (4 - Math.min(i, 3)),
+          desc: p.desc, cat: p.cat, amount: p.amount,
+          src: label.split(',')[0], isNew: true,
+        });
+      });
+      renderAll();
+      toast(`${howMany} transações importadas${review ? ` · ${review} a revisar` : ' · todas categorizadas'}`, '✅');
+    }
+  }, 120);
+}
+
+const dz = $('dropzone');
+dz.addEventListener('click', () => $('fileInput').click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  simulateImport([...e.dataTransfer.files].map(f => f.name));
+});
+$('fileInput').addEventListener('change', e => {
+  simulateImport([...e.target.files].map(f => f.name));
+  e.target.value = '';
+});
+
+// ─── Filtros / tema ──────────────────────────────────────
+$('searchInput').addEventListener('input', renderTable);
+$('catFilter').addEventListener('change', renderTable);
+$('typeFilter').addEventListener('change', renderTable);
+
+Object.keys(CATEGORIES).forEach(c => {
+  const o = document.createElement('option'); o.textContent = c; $('catFilter').appendChild(o);
+});
+
+$('themeBtn').addEventListener('click', () => {
+  document.documentElement.classList.toggle('dark');
+  try { localStorage.setItem('fluxo-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light'); } catch (e) {}
+});
+try {
+  const saved = localStorage.getItem('fluxo-theme');
+  if (saved === 'dark' || (!saved && matchMedia('(prefers-color-scheme: dark)').matches))
+    document.documentElement.classList.add('dark');
+} catch (e) {}
+
+$('monthPill').textContent = 'Julho de 2026';
+renderAll();
+</script>
+</body>
+</html>
