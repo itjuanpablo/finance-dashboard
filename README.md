@@ -1,123 +1,67 @@
-# 💰 Finance Dashboard
+# Fluxo — Finanças Pessoais
 
-> Aplicação web de controle financeiro pessoal — 100% client-side, sem servidor, com sincronização via GitHub e importação inteligente de extratos por IA.
+Dashboard local de finanças: importa extratos e faturas (PDF do Mercado Pago, OFX, CSV), categoriza automaticamente e aprende com suas correções. Dados 100% na sua máquina (`data/fluxo.db`) — nada sai do seu computador.
 
-[![Version](https://img.shields.io/badge/versão-1.2.0-blue)](#changelog)
-[![Stack](https://img.shields.io/badge/stack-HTML%20%2F%20CSS%20%2F%20JS-yellow)](#tecnologias)
-[![License](https://img.shields.io/badge/licença-MIT-green)](#)
+> Sucessor do Finance Dashboard v1.2.0 (HTML + localStorage), preservado no histórico do git (tags `v1.0.0` e `v1.2.0`).
 
----
+## Requisitos
 
-## 📌 Sobre o projeto
+- **Node.js 22.13 ou superior** (usa o SQLite embutido do Node — sem compilação nativa).
+  Verifique com `node -v`. Para atualizar: https://nodejs.org
 
-Sistema de gestão financeira pessoal desenvolvido para substituir planilhas e apps genéricos. Roda inteiramente no navegador — sem backend, sem banco de dados remoto, sem mensalidade. Os dados ficam persistidos no `localStorage` do browser e podem ser sincronizados entre dispositivos via um repositório privado do GitHub.
+## Como rodar
 
-A interface foi construída com foco em clareza e velocidade de uso: lançar uma transação leva menos de 10 segundos.
+```bash
+npm install
+npm run dev
+```
 
----
+Abra http://localhost:3000 e arraste seus arquivos na área de upload.
 
-## 🚀 Funcionalidades
+> O aviso "SQLite is an experimental feature" no terminal é normal e inofensivo.
 
-### 📊 Dashboard
-- Métricas do mês em destaque: total de gastos, receitas, saldo e valor fixo mensal
-- Gráfico de barras de gastos por categoria com marcação visual do limite definido
-- Gráfico de linha com evolução dos últimos 6 meses (gastos vs receitas)
-- Lista das últimas transações do mês
-- Navegação por mês com setas (◁ ▷)
+## Funcionalidades
 
-### 💸 Lançamentos
-- Formulário rápido: data, descrição, valor, categoria, tipo (gasto/receita) e cartão
-- Lista filtrável por tipo (Todos / Gastos / Receitas) com busca por texto
-- Exclusão individual de transações
-- Identificação visual de transações fixas com badge "fixa"
-- **Importação de extratos bancários** via modal:
-  - **CSV** — compatível com Nubank, Inter, C6, Itaú, Bradesco e Mercado Pago (detecta automaticamente o separador e ignora linhas de cabeçalho/resumo antes da tabela de dados)
-  - **OFX** — padrão bancário universal
-  - **PDF** — usa a *API Claude (Anthropic) para extrair transações visualmente, funciona com qualquer layout de extrato, inclusive PDFs escaneados
-  - Preview editável antes de confirmar: ajuste de categoria e cartão por linha
-  - Detecção automática de duplicatas (ignora transações já existentes)
-  - Auto-categorização por palavras-chave (Uber → Transporte, Netflix → Assinatura, iFood → Alimentação etc.)
+**Importação e dados**
 
-### 🔁 Fixas (Recorrentes)
-- Cadastro de transações fixas com dia do mês de vencimento
-- Resumo de comprometimento fixo mensal (gastos fixos, receitas fixas, saldo fixo)
-- Botão para lançar automaticamente todas as fixas do mês corrente sem duplicatas
+- PDF do Mercado Pago (extrato de conta e fatura de cartão), com parsers validados ao centavo contra os totais declarados nos documentos; OFX e CSV genéricos de qualquer banco.
+- Deduplicação: reimportar o mesmo arquivo ou períodos sobrepostos não duplica nada (ID de operação do banco no extrato, hash de conteúdo no resto).
+- Desfazer importação: cada arquivo vira um lote que pode ser revertido em um clique (menu **Importações**).
+- Transferências internas (pagamento de fatura, reservas) ficam fora dos totais — sem contagem dupla entre extrato e fatura.
 
-### 🎯 Metas
-- Definição de limite de gasto mensal por categoria
-- Definição de meta de receita por categoria
-- Barra de progresso visual com cores dinâmicas:
-  - 🟢 Verde — abaixo de 80%
-  - 🟡 Âmbar — entre 80% e 100%
-  - 🔴 Vermelho — acima do limite
-- **Sistema de alertas em 3 camadas:**
-  - Banner permanente no topo ao carregar a página
-  - Toast flutuante no canto inferior ao lançar ou importar
-  - Notificação nativa do browser (requer permissão)
-- Alerta por email via `mailto:` pré-preenchido ao ultrapassar o limite
+**Categorização**
 
-### 🏷️ Categorias
-- 9 categorias padrão com ícones e cores: Alimentação, Supermercado, Transporte, Saúde, Lazer, Assinatura, Cartão Crédito, Pix/Transfer, Outro
-- Criação de categorias personalizadas com emoji e 8 paletas de cor
-- Exclusão de categorias customizadas
+- Automática por dicionário de palavras-chave; o que não for reconhecido cai em "A revisar".
+- Ao corrigir uma transação, o app cria uma regra, aplica retroativamente às parecidas e usa nas próximas importações.
+- Menu **Regras** para ver, editar ou excluir as regras aprendidas.
 
-### 💳 Cartões
-- Cadastro de cartões/contas (Crédito, Débito, Pix/Conta) com cor personalizada
-- Gráfico de rosca com distribuição de gastos por cartão no mês
-- Total gasto por cartão no mês atual
+**Análise**
 
-### 📤 Exportar
-- Seleção de período personalizado
-- Exportação em **CSV** (compatível com Excel, com BOM UTF-8)
-- Exportação em **JSON** (com metadados de exportação)
-- Resumo do período: nº de lançamentos, total de gastos e receitas
+- Entradas, saídas, saldo e projeção do mês; gráfico de rosca por categoria.
+- **Metas** de gasto por categoria com barra de progresso (verde/âmbar/vermelho).
+- **Evolução mensal** dos últimos 6 meses (entradas × saídas).
+- **Parcelas já contratadas**: compromissos futuros do cartão detectados a partir das parcelas das faturas.
+- Detecção de **despesas recorrentes** (↻) com alerta quando o valor muda (assinatura que subiu de preço, por exemplo).
+- Exportação **CSV** das transações filtradas; busca, filtro por mês, categoria e tipo; tema claro/escuro.
 
-### ⚙️ Config (GitHub Sync)
-- Sincronização dos dados com repositório privado do GitHub via API
-- Salvar no GitHub: empurra todos os dados como `data.json`
-- Carregar do GitHub: restaura dados em qualquer dispositivo novo
-- **Auto-sync**: salva automaticamente em background após cada alteração
-- Registro de data/hora do último sync
-- Token armazenado localmente no browser (nunca enviado para terceiros além do GitHub)
-
----
-
-## 🛡️ Privacidade e segurança
-
-- Nenhum dado é enviado para servidores externos (exceto GitHub Sync, que vai para o seu próprio repositório privado)
-- A chave da API Anthropic (para importação PDF) é salva apenas no `localStorage` do seu browser
-- O token do GitHub é salvo apenas no `localStorage` do seu browser
-- Todo o processamento é feito localmente no navegador
-
----
-
-## 🛠️ Tecnologias
-
-| Tecnologia | Uso |
-|---|---|
-| HTML5 / CSS3 / JavaScript (ES2020+) | Interface e lógica principal |
-| [Chart.js 4.4](https://www.chartjs.org/) | Gráficos (linha e rosca) |
-| [API Anthropic Claude](https://docs.anthropic.com) | Extração de transações de PDFs |
-| [API GitHub Contents](https://docs.github.com/en/rest/repos/contents) | Sincronização de dados entre dispositivos |
-| localStorage | Persistência local dos dados |
-
----
-
-## 📁 Estrutura do projeto
+## Estrutura
 
 ```
-financas-pessoais/
-├── index.html       # Estrutura HTML, todas as páginas e modal de importação
-├── style.css        # Estilos, tema claro/escuro (prefers-color-scheme), responsivo
-├── app.js           # Toda a lógica: estado, renderização, importação, sync
-└── README.md        # Este arquivo
+app/                páginas e API (Next.js App Router)
+lib/parsers/        mercadopago.js (PDF), ofx.js, csv.js
+lib/categorizer.js  dicionário de categorias + regras aprendidas
+lib/importer.js     pipeline: parse → categoriza → deduplica → SQLite
+data/fluxo.db       seu banco (criado no primeiro uso; está no .gitignore)
 ```
----
 
-## 👤 Autor
+## Privacidade
 
-**Juan Pablo Ladeira**
-- GitHub: [@itjuanpablo](https://github.com/itjuanpablo)
+Todo o processamento é local. O repositório contém apenas código: o banco (`data/`), logs e builds estão no `.gitignore`. **Nunca comite extratos ou faturas reais** — nem como arquivo de teste.
 
----
+## Backup
 
+Copie o arquivo `data/fluxo.db`. Isso é tudo.
+
+## Licença
+
+[MIT](./LICENSE)
