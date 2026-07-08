@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import { CATEGORIES } from '@/lib/categorizer';
+import { getDb, isValidCategory } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,10 +15,10 @@ export async function GET() {
 // POST: cria ou edita uma regra (upsert por padrão de texto).
 export async function POST(request) {
   const { pattern, category } = await request.json();
-  if (!pattern || pattern.trim().length < 3 || !(category in CATEGORIES)) {
+  const db = getDb();
+  if (!pattern || pattern.trim().length < 3 || !isValidCategory(db, category)) {
     return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
   }
-  const db = getDb();
   db.prepare(
     'INSERT INTO rules (pattern, category) VALUES (?, ?) ON CONFLICT(pattern) DO UPDATE SET category = excluded.category'
   ).run(pattern.trim(), category);

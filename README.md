@@ -35,6 +35,14 @@ Abra http://localhost:3000 e arraste seus arquivos na área de upload.
 - Ao corrigir uma transação, o app cria uma regra, aplica retroativamente às parecidas e usa nas próximas importações.
 - Menu **Regras** para ver, editar ou excluir as regras aprendidas.
 
+**Gerenciamento** (página `/gerenciar`)
+
+- Lançamentos: edição inline de data, descrição e valor (Enter salva, Esc cancela), com original preservado e "restaurar"; seleção em lote (shift+clique para intervalo) para recategorizar ou excluir; toda ação tem "Desfazer".
+- Categorias: criar, editar (nome, cor, emoji), arquivar ou excluir movendo as transações para outra categoria; renomear propaga para transações, regras e metas.
+- Contas: saldo calculado (inicial + movimentos das origens vinculadas), nunca digitado.
+- Cartões: limite, dias de fechamento/vencimento, fatura aberta e limite disponível estimados.
+- Exclusões são reversíveis (soft delete) e não quebram a deduplicação de reimportações.
+
 **Análise**
 
 - Entradas, saídas, saldo e projeção do mês; gráfico de rosca por categoria.

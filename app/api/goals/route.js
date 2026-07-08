@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import { CATEGORIES } from '@/lib/categorizer';
+import { getDb, isValidCategory } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,10 +13,11 @@ export async function GET() {
 // PUT: define/atualiza a meta de uma categoria; limite <= 0 remove a meta.
 export async function PUT(request) {
   const { category, limit_cents } = await request.json();
-  if (!(category in CATEGORIES) || typeof limit_cents !== 'number') {
+  const db = getDb();
+  if (typeof limit_cents !== 'number' ||
+      (limit_cents > 0 && !isValidCategory(db, category))) {
     return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
   }
-  const db = getDb();
   if (limit_cents <= 0) {
     db.prepare('DELETE FROM goals WHERE category = ?').run(category);
   } else {
