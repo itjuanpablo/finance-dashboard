@@ -4,7 +4,7 @@
 node_modules/
 .next/
 data/
+docs/
 *.log
 
-docs/
 scripts/
