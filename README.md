@@ -20,6 +20,14 @@ Abra http://localhost:3000 e arraste seus arquivos na área de upload.
 
 > O aviso "SQLite is an experimental feature" no terminal é normal e inofensivo.
 
+## Rodar sempre, sem terminal (macOS)
+
+```bash
+bash scripts/instalar-autostart.sh
+```
+
+Isso registra o Fluxo no launchd: ele sobe sozinho no login, reinicia se cair, e fica sempre disponível em **http://localhost:3210** — salve nos favoritos e lance seus gastos quando quiser, sem `npm run dev`. Comandos úteis: `bash scripts/atualizar.sh` (após mudar o código) e `bash scripts/desinstalar-autostart.sh` (remove o serviço; app e dados ficam intactos). Logs em `~/Library/Logs/fluxo.log`.
+
 ## Funcionalidades
 
 **Importação e dados**
