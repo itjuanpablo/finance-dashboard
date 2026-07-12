@@ -331,6 +331,7 @@ export default function Dashboard() {
           <button className="hbtn" onClick={() => exportCsv(rows)} title="Exportar transações filtradas">⬇ CSV</button>
           <button className="hbtn" onClick={() => setModal('rules')}>🧠 Regras{rules.length ? ` (${rules.length})` : ''}</button>
           <button className="hbtn" onClick={() => setModal('batches')}>🗂 Importações</button>
+          <a className="hbtn" href="/cartoes" style={{ textDecoration: 'none' }}>💳 Faturas</a>
           <a className="hbtn" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ Gerenciar</a>
           <select className="control" value={month} onChange={e => { setMonth(e.target.value); setActiveCat(null); }}>
             <option value="">Todo o período</option>

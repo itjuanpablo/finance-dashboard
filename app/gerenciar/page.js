@@ -700,6 +700,8 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                     </>
                   )}
                   <div style={{ display: 'flex', gap: 8 }}>
+                    <a className="hbtn" style={{ height: 28, fontSize: 12, textDecoration: 'none' }}
+                      href={`/cartoes?card=${c.id}`}>Faturas</a>
                     <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={() => {
                       setEditCard(c.id); setEditAcc(null);
                       setDraft({
