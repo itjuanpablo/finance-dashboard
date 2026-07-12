@@ -2,6 +2,12 @@
 
 Todas as mudanças relevantes do projeto. Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/); versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.2.1] — 2026-07-12
+
+### Corrigido
+- PDFs de fatura com camada de texto corrompida (fonte com mapa de caracteres embaralhado, gerada ocasionalmente pelo emissor) agora são detectados e retornam mensagem explicativa com alternativas, em vez do genérico "nenhuma transação encontrada".
+- Parser de extrato não engole mais texto de rodapé/ajuda ("Portal de ajuda", SAC etc.) na descrição das transações; descrições passam a ter limite de 120 caracteres.
+
 ## [2.2.0] — 2026-07-12
 
 ### Adicionado
