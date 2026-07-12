@@ -8,3 +8,14 @@ docs/
 *.log
 
 scripts/
+
+# documentos de trabalho locais (nao versionar)
+ARQUITETURA.md
+prototipo.html
+
+# protecao contra commit acidental de extratos/faturas pessoais
+*.pdf
+*.ofx
+*.csv
+uploads/
+exports/

@@ -51,8 +51,9 @@ Isso registra o Fluxo no launchd: ele sobe sozinho no login, reinicia se cair, e
 - Cartões: limite, dias de fechamento/vencimento, fatura aberta e limite disponível estimados.
 - Exclusões são reversíveis (soft delete) e não quebram a deduplicação de reimportações.
 
-**Análise**
+**Análise e insights**
 
+- Motor de insights com regras transparentes: gasto acima da média histórica, assinatura que subiu de preço, meta em risco, fatura perto de fechar e sugestão de corte com impacto anualizado — cada card mostra o número que o gerou e é dispensável.
 - Entradas, saídas, saldo e projeção do mês; gráfico de rosca por categoria.
 - **Metas** de gasto por categoria com barra de progresso (verde/âmbar/vermelho).
 - **Evolução mensal** dos últimos 6 meses (entradas × saídas).

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { computeInsights } from '@/lib/insights';
 
 const fmtBRL = cents =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -22,8 +23,10 @@ export default function Dashboard() {
   const [txs, setTxs] = useState(null);
   const [categories, setCategories] = useState({});
   const [goals, setGoals] = useState([]);
+  const [cards, setCards] = useState([]);
   const [rules, setRules] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [dismissed, setDismissed] = useState(null); // null até hidratar
   const [modal, setModal] = useState(null); // 'rules' | 'batches' | null
   const [month, setMonth] = useState('');
   const [search, setSearch] = useState('');
@@ -46,9 +49,9 @@ export default function Dashboard() {
   };
 
   async function load(selectLatestMonth = false) {
-    const [tRes, gRes, rRes, bRes] = await Promise.all([
+    const [tRes, gRes, rRes, bRes, cRes] = await Promise.all([
       fetch('/api/transactions'), fetch('/api/goals'),
-      fetch('/api/rules'), fetch('/api/batches'),
+      fetch('/api/rules'), fetch('/api/batches'), fetch('/api/cards'),
     ]);
     const t = await tRes.json();
     setTxs(t.transactions);
@@ -56,11 +59,33 @@ export default function Dashboard() {
     setGoals((await gRes.json()).goals);
     setRules((await rRes.json()).rules);
     setBatches((await bRes.json()).batches);
+    setCards((await cRes.json()).cards);
     if (selectLatestMonth && t.transactions.length) {
       setMonth(m => m || t.transactions[0].date.slice(0, 7));
     }
   }
-  useEffect(() => { load(true); }, []);
+  useEffect(() => {
+    load(true);
+    try {
+      setDismissed(new Set(JSON.parse(localStorage.getItem('fluxo-insights-off') || '[]')));
+    } catch { setDismissed(new Set()); }
+  }, []);
+
+  const dismissInsight = id => {
+    setDismissed(prev => {
+      const next = new Set(prev || []);
+      next.add(id);
+      try { localStorage.setItem('fluxo-insights-off', JSON.stringify([...next])); } catch (e) {}
+      return next;
+    });
+  };
+
+  const insights = useMemo(() => {
+    if (!txs || !dismissed) return [];
+    return computeInsights({ transactions: txs, goals, cards })
+      .filter(i => !dismissed.has(i.id))
+      .slice(0, 3);
+  }, [txs, goals, cards, dismissed]);
 
   // ── Importação ────────────────────────────────────────
   async function upload(files) {
@@ -301,7 +326,7 @@ export default function Dashboard() {
   return (
     <div className="container">
       <header>
-        <div className="logo"><div className="logo-mark">F</div>Fluxo</div>
+        <div className="logo"><img src="/icon.svg" alt="" width={30} height={30} style={{ borderRadius: 9 }} />Fluxo</div>
         <div className="header-right">
           <button className="hbtn" onClick={() => exportCsv(rows)} title="Exportar transações filtradas">⬇ CSV</button>
           <button className="hbtn" onClick={() => setModal('rules')}>🧠 Regras{rules.length ? ` (${rules.length})` : ''}</button>
@@ -361,6 +386,25 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {insights.length > 0 && (
+        <div className="insights-row">
+          {insights.map(i => (
+            <div key={i.id} className={`insight-card sev-${i.severity}`}>
+              <button className="insight-x" title="Não mostrar de novo neste mês"
+                onClick={() => dismissInsight(i.id)}>✕</button>
+              <div className="insight-title">{i.title}</div>
+              <div className="insight-detail">{i.detail}</div>
+              {i.action && (
+                <button className="insight-action" onClick={() => {
+                  if (i.action.filter?.cat) { setCatFilter(i.action.filter.cat); setTypeFilter(''); }
+                  if (i.action.filter?.search) setSearch(i.action.filter.search);
+                }}>{i.action.label} →</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid">
         <div className="left-col">

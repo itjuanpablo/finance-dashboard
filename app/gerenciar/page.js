@@ -111,7 +111,7 @@ export default function Gerenciar() {
       <header>
         <div className="logo" style={{ gap: 14 }}>
           <a href="/" className="hbtn" style={{ textDecoration: 'none' }}>← Dashboard</a>
-          <span><span className="logo-mark" style={{ display: 'inline-grid', verticalAlign: 'middle', marginRight: 8 }}>F</span>Gerenciar</span>
+          <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />Gerenciar</span>
         </div>
         <button className="theme-toggle" title="Alternar tema" onClick={() => {
           document.documentElement.classList.toggle('dark');
