@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ContasAPagar from '@/components/ContasAPagar';
+import { configurePin } from '@/components/PinGate';
 
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -115,6 +116,10 @@ export default function Gerenciar() {
           <a href="/" className="hbtn" style={{ textDecoration: 'none' }}>← Dashboard</a>
           <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />Gerenciar</span>
         </div>
+        <button className="theme-toggle" title="Definir/alterar PIN de bloqueio" onClick={async () => {
+          const msg = await configurePin();
+          if (msg) alert(msg);
+        }} style={{ marginRight: 8 }}>🔒</button>
         <button className="theme-toggle" title="Modo privacidade: esconder valores" onClick={() => {
           const on = document.documentElement.classList.toggle('privacy');
           try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}

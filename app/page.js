@@ -85,6 +85,18 @@ export default function Dashboard() {
       setDismissed(new Set(JSON.parse(localStorage.getItem('fluxo-insights-off') || '[]')));
       setUserName(localStorage.getItem('fluxo-nome') || '');
     } catch { setDismissed(new Set()); }
+    // atalho do PWA (segurar o ícone) e de URL: /?add=despesa|receita
+    const add = new URLSearchParams(window.location.search).get('add');
+    if (add === 'despesa' || add === 'receita') setQuickAdd(add);
+    // atalhos de teclado: d = despesa, r = receita
+    const onKey = e => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target.closest?.('input, select, textarea')) return;
+      if (e.key === 'd') setQuickAdd('despesa');
+      if (e.key === 'r') setQuickAdd('receita');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const editName = () => {
@@ -429,9 +441,9 @@ export default function Dashboard() {
           </button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="hbtn" style={{ color: 'var(--red)' }}
+          <button className="hbtn" style={{ color: 'var(--red)' }} title="Atalho: tecla D"
             onClick={() => setQuickAdd('despesa')}>− Despesa</button>
-          <button className="hbtn" style={{ color: 'var(--green)' }}
+          <button className="hbtn" style={{ color: 'var(--green)' }} title="Atalho: tecla R"
             onClick={() => setQuickAdd('receita')}>+ Receita</button>
         </div>
       </div>

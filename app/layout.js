@@ -1,8 +1,14 @@
 import './globals.css';
+import PinGate from '@/components/PinGate';
 
 export const metadata = {
   title: 'Fluxo — Finanças Pessoais',
   description: 'Controle de gastos local, automatizado e minimalista',
+  appleWebApp: { capable: true, title: 'Fluxo', statusBarStyle: 'black-translucent' },
+};
+
+export const viewport = {
+  themeColor: '#4f46e5',
 };
 
 const themeInit = `
@@ -20,7 +26,7 @@ export default function RootLayout({ children }) {
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
-        {children}
+        <PinGate>{children}</PinGate>
       </body>
     </html>
   );
