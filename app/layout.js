@@ -10,6 +10,8 @@ try {
   var t = localStorage.getItem('fluxo-theme');
   if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches))
     document.documentElement.classList.add('dark');
+  if (localStorage.getItem('fluxo-privacy') === '1')
+    document.documentElement.classList.add('privacy');
 } catch (e) {}
 `;
 

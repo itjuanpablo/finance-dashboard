@@ -115,6 +115,10 @@ export default function Gerenciar() {
           <a href="/" className="hbtn" style={{ textDecoration: 'none' }}>← Dashboard</a>
           <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />Gerenciar</span>
         </div>
+        <button className="theme-toggle" title="Modo privacidade: esconder valores" onClick={() => {
+          const on = document.documentElement.classList.toggle('privacy');
+          try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}
+        }} style={{ marginRight: 8 }}>👁</button>
         <button className="theme-toggle" title="Alternar tema" onClick={() => {
           document.documentElement.classList.toggle('dark');
           try {

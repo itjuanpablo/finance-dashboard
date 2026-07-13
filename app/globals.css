@@ -389,3 +389,20 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
   padding: 0; font-family: inherit; border-bottom: 1.5px dashed transparent;
 }
 .greeting-name:hover { border-bottom-color: var(--accent); color: var(--accent); }
+
+/* ── Modo privacidade (olhinho) ─────────── */
+html.privacy .card-value,
+html.privacy .amount,
+html.privacy .legend-item .val,
+html.privacy .legend-item .pct,
+html.privacy .donut-center .t,
+html.privacy .goal-row .nums,
+html.privacy .future-row .v,
+html.privacy .sumbox-value,
+html.privacy .acc-card .big,
+html.privacy .insight-detail,
+html.privacy .list-row .sub {
+  filter: blur(8px);
+  user-select: none;
+  pointer-events: none;
+}

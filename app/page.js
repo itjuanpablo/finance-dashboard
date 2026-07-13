@@ -373,11 +373,16 @@ export default function Dashboard() {
           <button className="hbtn" onClick={() => setModal('rules')}>🧠 Regras{rules.length ? ` (${rules.length})` : ''}</button>
           <button className="hbtn" onClick={() => setModal('batches')}>🗂 Importações</button>
           <a className="hbtn" href="/cartoes" style={{ textDecoration: 'none' }}>💳 Faturas</a>
+          <a className="hbtn" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 Evoluir</a>
           <a className="hbtn" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ Gerenciar</a>
           <select className="control" value={month} onChange={e => { setMonth(e.target.value); setActiveCat(null); }}>
             <option value="">Todo o período</option>
             {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
           </select>
+          <button className="theme-toggle" title="Modo privacidade: esconder valores" onClick={() => {
+            const on = document.documentElement.classList.toggle('privacy');
+            try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}
+          }}>👁</button>
           <button className="theme-toggle" title="Alternar tema" onClick={() => {
             document.documentElement.classList.toggle('dark');
             try {
@@ -453,12 +458,15 @@ export default function Dashboard() {
                 onClick={() => dismissInsight(i.id)}>✕</button>
               <div className="insight-title">{i.title}</div>
               <div className="insight-detail">{i.detail}</div>
-              {i.action && (
+              {i.action && (i.action.href ? (
+                <a className="insight-action" href={i.action.href}
+                  style={{ display: 'inline-block', textDecoration: 'none' }}>{i.action.label} →</a>
+              ) : (
                 <button className="insight-action" onClick={() => {
                   if (i.action.filter?.cat) { setCatFilter(i.action.filter.cat); setTypeFilter(''); }
                   if (i.action.filter?.search) setSearch(i.action.filter.search);
                 }}>{i.action.label} →</button>
-              )}
+              ))}
             </div>
           ))}
         </div>
