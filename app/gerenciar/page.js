@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import ContasAPagar from '@/components/ContasAPagar';
 
 const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -16,6 +17,7 @@ const TABS = [
   ['lancamentos', '☰', 'Lançamentos'],
   ['categorias', '🏷', 'Categorias'],
   ['contas', '💳', 'Contas e cartões'],
+  ['apagar', '📅', 'Contas a pagar'],
   ['regras', '🧠', 'Regras'],
   ['importacoes', '🗂', 'Importações'],
 ];
@@ -144,6 +146,9 @@ export default function Gerenciar() {
           {tab === 'contas' && (
             <Contas accounts={accounts} cards={cards} knownSources={knownSources}
               toast={toast} reload={loadAll} />
+          )}
+          {tab === 'apagar' && (
+            <ContasAPagar cats={cats} toast={toast} />
           )}
           {tab === 'regras' && (
             <div className="panel">

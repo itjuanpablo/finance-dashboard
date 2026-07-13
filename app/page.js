@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [emojis, setEmojis] = useState({});
   const [quickAdd, setQuickAdd] = useState(null); // 'despesa' | 'receita' | null
   const [userName, setUserName] = useState('');
+  const [billOccurrences, setBillOccurrences] = useState([]);
   const [modal, setModal] = useState(null); // 'rules' | 'batches' | null
   const [month, setMonth] = useState('');
   const [search, setSearch] = useState('');
@@ -60,10 +61,12 @@ export default function Dashboard() {
   };
 
   async function load(selectLatestMonth = false) {
-    const [tRes, gRes, rRes, bRes, cRes] = await Promise.all([
+    const [tRes, gRes, rRes, bRes, cRes, biRes] = await Promise.all([
       fetch('/api/transactions'), fetch('/api/goals'),
       fetch('/api/rules'), fetch('/api/batches'), fetch('/api/cards'),
+      fetch('/api/bills'),
     ]);
+    setBillOccurrences((await biRes.json()).occurrences || []);
     const t = await tRes.json();
     setTxs(t.transactions);
     setCategories(t.categories);
@@ -102,10 +105,28 @@ export default function Dashboard() {
 
   const insights = useMemo(() => {
     if (!txs || !dismissed) return [];
-    return computeInsights({ transactions: txs, goals, cards })
+    return computeInsights({ transactions: txs, goals, cards, billOccurrences })
       .filter(i => !dismissed.has(i.id))
       .slice(0, 3);
-  }, [txs, goals, cards, dismissed]);
+  }, [txs, goals, cards, billOccurrences, dismissed]);
+
+  // vencimentos a exibir: atrasadas + próximas 45 dias, não pagas
+  const upcomingBills = useMemo(() => {
+    const cutoff = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10);
+    return billOccurrences
+      .filter(o => o.status === 'atrasada' || (o.status === 'proxima' && o.due_date <= cutoff))
+      .slice(0, 6);
+  }, [billOccurrences]);
+
+  async function payBill(o) {
+    await fetch('/api/bills', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bill_id: o.bill_id, ref: o.ref, paid: true }),
+    });
+    toast(`${o.description} (${o.ref}) marcada como paga`, '✅');
+    await load();
+  }
 
   // ── Importação ────────────────────────────────────────
   async function upload(files) {
@@ -528,6 +549,32 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {upcomingBills.length > 0 && (
+            <div className="panel">
+              <div className="panel-head">
+                <h2>Próximos vencimentos</h2>
+                <a href="/gerenciar?tab=apagar" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>gerenciar</a>
+              </div>
+              <div className="panel-body">
+                {upcomingBills.map(o => (
+                  <div className="future-row" key={`${o.bill_id}:${o.ref}`}>
+                    <span>
+                      {emojis[o.category] ? `${emojis[o.category]} ` : ''}{o.description}
+                      <span style={{ color: o.status === 'atrasada' ? 'var(--red)' : 'var(--muted)', fontSize: 11.5, marginLeft: 6 }}>
+                        {o.status === 'atrasada' ? 'atrasada · ' : ''}venc {o.due_date.slice(8, 10)}/{o.due_date.slice(5, 7)}
+                      </span>
+                    </span>
+                    <span className="v">
+                      {fmtBRL(o.amount_cents)}
+                      <button className="goal-del" title="Marcar como paga" style={{ marginLeft: 6, color: 'var(--green)' }}
+                        onClick={() => payBill(o)}>✓</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {evolution.length > 1 && (
             <div className="panel">
