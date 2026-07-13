@@ -9,6 +9,9 @@ export const metadata = {
 
 export const viewport = {
   themeColor: '#4f46e5',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover', // respeita o entalhe do iPhone no modo app
 };
 
 const themeInit = `

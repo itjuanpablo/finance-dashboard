@@ -390,6 +390,65 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 }
 .greeting-name:hover { border-bottom-color: var(--accent); color: var(--accent); }
 
+/* ── Mobile (celular / PWA) ─────────────── */
+@media (max-width: 640px) {
+  .container { padding: 0 12px 90px; }
+  header { flex-wrap: wrap; gap: 10px; padding: 14px 0; margin-bottom: 18px; }
+  .logo { font-size: 16px; }
+  /* barra de ações vira trilho rolável com o polegar */
+  .header-right {
+    width: 100%; flex-wrap: nowrap; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; padding-bottom: 4px;
+  }
+  .header-right::-webkit-scrollbar { display: none; }
+  .header-right .hbtn, .header-right .control,
+  .header-right .theme-toggle { flex-shrink: 0; }
+
+  .greeting-hello, .greeting-name { font-size: 18px; }
+  .dropzone { padding: 20px 14px; margin-bottom: 18px; }
+  .dropzone h3 { font-size: 14px; }
+  .dropzone p { font-size: 12px; }
+  .dropzone-icon { width: 38px; height: 38px; font-size: 17px; margin-bottom: 8px; }
+
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .card { padding: 13px; }
+  .card-value { font-size: 18px; }
+  .card-sub { font-size: 11px; }
+  .insights-row { grid-template-columns: 1fr; gap: 8px; margin-bottom: 18px; }
+
+  .panel-head { padding: 14px 14px 0; }
+  .panel-body { padding: 12px 14px 16px; }
+  .legend { padding: 8px 12px 14px; }
+  .filters { padding: 10px 12px; gap: 8px; }
+  thead th { padding: 10px 10px; }
+  tbody td { padding: 10px 10px; font-size: 13px; }
+  .desc small { display: none; }
+  .modal { max-width: 100%; max-height: 88vh; }
+  .modal-overlay { padding: 10px; align-items: flex-end; }
+
+  /* inputs com 16px: impede o zoom automático do iOS ao focar */
+  .search input, select.control, .inline-edit,
+  .cat-editor input, .acc-form input, .acc-form select, .goal-form input {
+    font-size: 16px;
+  }
+
+  .inv-nav { padding: 14px 12px 10px; }
+  .inv-summary { grid-template-columns: 1fr 1fr; padding: 6px 12px 14px; }
+  .inv-summary .sumbox:first-child { grid-column: 1 / -1; }
+  .sumbox-value { font-size: 18px; }
+  .acc-form { grid-template-columns: 1fr; }
+  .acc-grid { grid-template-columns: 1fr; }
+  .bulk-bar { flex-wrap: wrap; width: auto; border-radius: 14px; }
+}
+
+/* PWA instalado: afasta o conteúdo do entalhe e da barra do iPhone */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 /* ── Impressão (relatório → PDF) ────────── */
 @media print {
   .no-print { display: none !important; }
