@@ -113,7 +113,7 @@ export default function Gerenciar() {
     <div className="container">
       <header>
         <div className="logo" style={{ gap: 14 }}>
-          <a href="/" className="hbtn" style={{ textDecoration: 'none' }}>← Dashboard</a>
+          <a href="/" className="hbtn desk-only" style={{ textDecoration: 'none' }}>← Dashboard</a>
           <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />Gerenciar</span>
         </div>
         <button className="theme-toggle" title="Definir/alterar PIN de bloqueio" onClick={async () => {

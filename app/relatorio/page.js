@@ -70,7 +70,7 @@ export default function Relatorio() {
     <div className="container" style={{ maxWidth: 860 }}>
       <header className="no-print">
         <div className="logo" style={{ gap: 14 }}>
-          <a href="/" className="hbtn" style={{ textDecoration: 'none' }}>← Dashboard</a>
+          <a href="/" className="hbtn desk-only" style={{ textDecoration: 'none' }}>← Dashboard</a>
           <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />Relatório</span>
         </div>
         <button className="hbtn" onClick={() => window.print()}>🖨 Imprimir / Salvar PDF</button>

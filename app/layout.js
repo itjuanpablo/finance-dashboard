@@ -1,5 +1,6 @@
 import './globals.css';
 import PinGate from '@/components/PinGate';
+import BottomNav from '@/components/BottomNav';
 
 export const metadata = {
   title: 'Fluxo — Finanças Pessoais',
@@ -29,7 +30,10 @@ export default function RootLayout({ children }) {
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
-        <PinGate>{children}</PinGate>
+        <PinGate>
+          {children}
+          <BottomNav />
+        </PinGate>
       </body>
     </html>
   );

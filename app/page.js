@@ -408,12 +408,12 @@ export default function Dashboard() {
       <header>
         <div className="logo"><img src="/icon.svg" alt="" width={30} height={30} style={{ borderRadius: 9 }} />Fluxo</div>
         <div className="header-right">
-          <button className="hbtn" onClick={() => exportCsv(rows)} title="Exportar transações filtradas">⬇ CSV</button>
-          <button className="hbtn" onClick={() => setModal('rules')}>🧠 Regras{rules.length ? ` (${rules.length})` : ''}</button>
-          <button className="hbtn" onClick={() => setModal('batches')}>🗂 Importações</button>
-          <a className="hbtn" href="/cartoes" style={{ textDecoration: 'none' }}>💳 Faturas</a>
-          <a className="hbtn" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 Evoluir</a>
-          <a className="hbtn" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ Gerenciar</a>
+          <button className="hbtn desk-only" onClick={() => exportCsv(rows)} title="Exportar transações filtradas">⬇ CSV</button>
+          <button className="hbtn desk-only" onClick={() => setModal('rules')}>🧠 Regras{rules.length ? ` (${rules.length})` : ''}</button>
+          <button className="hbtn desk-only" onClick={() => setModal('batches')}>🗂 Importações</button>
+          <a className="hbtn desk-only" href="/cartoes" style={{ textDecoration: 'none' }}>💳 Faturas</a>
+          <a className="hbtn desk-only" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 Evoluir</a>
+          <a className="hbtn desk-only" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ Gerenciar</a>
           <select className="control" value={month} onChange={e => { setMonth(e.target.value); setActiveCat(null); }}>
             <option value="">Todo o período</option>
             {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
