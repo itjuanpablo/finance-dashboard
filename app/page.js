@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { computeInsights } from '@/lib/insights';
+import RevisaoMassa from '@/components/RevisaoMassa';
+import LancamentoRapido from '@/components/LancamentoRapido';
+
+const saudacao = () => {
+  const h = new Date().getHours();
+  return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+};
 
 const fmtBRL = cents =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -27,6 +34,10 @@ export default function Dashboard() {
   const [rules, setRules] = useState([]);
   const [batches, setBatches] = useState([]);
   const [dismissed, setDismissed] = useState(null); // null até hidratar
+  const [showReview, setShowReview] = useState(false);
+  const [emojis, setEmojis] = useState({});
+  const [quickAdd, setQuickAdd] = useState(null); // 'despesa' | 'receita' | null
+  const [userName, setUserName] = useState('');
   const [modal, setModal] = useState(null); // 'rules' | 'batches' | null
   const [month, setMonth] = useState('');
   const [search, setSearch] = useState('');
@@ -56,6 +67,7 @@ export default function Dashboard() {
     const t = await tRes.json();
     setTxs(t.transactions);
     setCategories(t.categories);
+    setEmojis(t.categoryEmojis || {});
     setGoals((await gRes.json()).goals);
     setRules((await rRes.json()).rules);
     setBatches((await bRes.json()).batches);
@@ -68,8 +80,16 @@ export default function Dashboard() {
     load(true);
     try {
       setDismissed(new Set(JSON.parse(localStorage.getItem('fluxo-insights-off') || '[]')));
+      setUserName(localStorage.getItem('fluxo-nome') || '');
     } catch { setDismissed(new Set()); }
   }, []);
+
+  const editName = () => {
+    const n = prompt('Como você quer ser chamado?', userName || '');
+    if (n === null) return;
+    setUserName(n.trim());
+    try { localStorage.setItem('fluxo-nome', n.trim()); } catch (e) {}
+  };
 
   const dismissInsight = id => {
     setDismissed(prev => {
@@ -347,6 +367,22 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <div className="greeting">
+        <div>
+          <span className="greeting-hello">{saudacao()},</span>{' '}
+          <button className="greeting-name" onClick={editName}
+            title="Clique para editar seu nome">
+            {userName || 'defina seu nome'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="hbtn" style={{ color: 'var(--red)' }}
+            onClick={() => setQuickAdd('despesa')}>− Despesa</button>
+          <button className="hbtn" style={{ color: 'var(--green)' }}
+            onClick={() => setQuickAdd('receita')}>+ Receita</button>
+        </div>
+      </div>
+
       <div
         className={`dropzone ${drag ? 'dragover' : ''} ${busy ? 'busy' : ''}`}
         onClick={() => fileRef.current?.click()}
@@ -441,7 +477,7 @@ export default function Dashboard() {
                       style={{ opacity: activeCat && activeCat !== cat ? .4 : 1 }}
                       onClick={() => setActiveCat(a => a === cat ? null : cat)}>
                       <span className="dot" style={{ background: categories[cat] }} />
-                      <span className="name">{cat}</span>
+                      <span className="name">{emojis[cat] ? `${emojis[cat]} ` : ''}{cat}</span>
                       <span className="val">{fmtBRL(val)}</span>
                       <span className="pct">{(val / donut.total * 100).toFixed(0)}%</span>
                     </button>
@@ -468,7 +504,7 @@ export default function Dashboard() {
                     <div className="goal-row">
                       <span className="name">
                         <span className="dot" style={{ background: categories[g.category] }} />
-                        {g.category}
+                        {emojis[g.category] ? `${emojis[g.category]} ` : ''}{g.category}
                       </span>
                       <span className="nums">{fmtBRL(spent)} / {fmtBRL(g.limit_cents)} ({realPct.toFixed(0)}%)</span>
                       <button className="goal-del" title="Remover meta"
@@ -541,7 +577,8 @@ export default function Dashboard() {
             <h2>Transações <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 13 }}>· {rows.length}</span></h2>
             {reviewCount > 0 && (
               <button style={{ border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--amber)', borderRadius: 10, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
-                onClick={() => { setTypeFilter('review'); setMonth(''); }}>
+                title="Revisar em massa, agrupado por estabelecimento"
+                onClick={() => setShowReview(true)}>
                 ⚠ {reviewCount} a revisar
               </button>
             )}
@@ -584,7 +621,9 @@ export default function Dashboard() {
                             outline: t.category === 'A revisar' ? `1.5px dashed ${color}88` : 'none',
                           }}
                           onChange={e => changeCategory(t, e.target.value)}>
-                          {Object.keys(categories).map(c => <option key={c}>{c}</option>)}
+                          {Object.keys(categories).map(c => (
+                            <option key={c} value={c}>{emojis[c] ? `${emojis[c]} ` : ''}{c}</option>
+                          ))}
                         </select>
                       </td>
                       <td className={`amount ${t.transfer ? 'trf' : t.amount_cents > 0 ? 'in' : 'out'}`}>
@@ -648,6 +687,27 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {quickAdd && (
+        <LancamentoRapido tipo={quickAdd} categories={categories} emojis={emojis}
+          onClose={() => setQuickAdd(null)}
+          onDone={async r => {
+            if (r.error) { toast(r.error, '⚠️', true); return; }
+            setQuickAdd(null);
+            toast(r.msg, '✅');
+            await load();
+          }} />
+      )}
+
+      {showReview && (
+        <RevisaoMassa txs={txs} categories={categories}
+          onClose={() => setShowReview(false)}
+          onDone={async r => {
+            if (r.error) toast(r.error, '⚠️', true);
+            else toast(r.msg, '🧠');
+            await load();
+          }} />
       )}
 
       <div className="toasts">

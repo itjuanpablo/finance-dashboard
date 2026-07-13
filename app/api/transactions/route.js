@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { getDb, categoryColors, isValidCategory } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -12,7 +13,33 @@ export async function GET() {
     FROM transactions WHERE deleted_at IS NULL
     ORDER BY date DESC, id DESC
   `).all();
-  return NextResponse.json({ transactions, categories: categoryColors(db) });
+  const categoryEmojis = {};
+  db.prepare('SELECT name, emoji FROM categories WHERE archived = 0')
+    .all().forEach(c => { categoryEmojis[c.name] = c.emoji; });
+  return NextResponse.json({ transactions, categories: categoryColors(db), categoryEmojis });
+}
+
+// POST: lançamento manual (despesa ou receita) — sem arquivo, direto no app.
+export async function POST(request) {
+  const { date, description, amount_cents, category } = await request.json();
+  const db = getDb();
+  const desc = String(description || '').trim();
+  const cents = Math.round(Number(amount_cents));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+    return NextResponse.json({ error: 'Data inválida' }, { status: 400 });
+  }
+  if (!desc) return NextResponse.json({ error: 'Descrição obrigatória' }, { status: 400 });
+  if (!isFinite(cents) || cents === 0) {
+    return NextResponse.json({ error: 'Valor inválido' }, { status: 400 });
+  }
+  if (!isValidCategory(db, category)) {
+    return NextResponse.json({ error: 'Categoria inválida' }, { status: 400 });
+  }
+  db.prepare(`
+    INSERT INTO transactions (date, description, amount_cents, category, transfer, source, hash)
+    VALUES (?, ?, ?, ?, 0, 'manual', ?)
+  `).run(date, desc, cents, category, `manual:${crypto.randomUUID()}`);
+  return NextResponse.json({ ok: true });
 }
 
 // PATCH: edita uma transação (categoria, data, descrição, valor, transferência).

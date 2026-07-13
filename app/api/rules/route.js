@@ -13,16 +13,24 @@ export async function GET() {
 }
 
 // POST: cria ou edita uma regra (upsert por padrão de texto).
+// apply: true também recategoriza retroativamente tudo que está em "A revisar".
 export async function POST(request) {
-  const { pattern, category } = await request.json();
+  const { pattern, category, apply } = await request.json();
   const db = getDb();
   if (!pattern || pattern.trim().length < 3 || !isValidCategory(db, category)) {
     return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
   }
+  const p = pattern.trim();
   db.prepare(
     'INSERT INTO rules (pattern, category) VALUES (?, ?) ON CONFLICT(pattern) DO UPDATE SET category = excluded.category'
-  ).run(pattern.trim(), category);
-  return NextResponse.json({ ok: true });
+  ).run(p, category);
+  let applied = 0;
+  if (apply) {
+    applied = db.prepare(
+      "UPDATE transactions SET category = ? WHERE category = 'A revisar' AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE"
+    ).run(category, `%${p}%`).changes;
+  }
+  return NextResponse.json({ ok: true, applied });
 }
 
 // DELETE: remove uma regra. Transações já categorizadas não são alteradas.
