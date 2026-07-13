@@ -204,14 +204,14 @@ export default function Dashboard() {
     await load();
   }
 
-  // ── Metas ─────────────────────────────────────────────
-  async function saveGoal(category, reais) {
+  // ── Metas / Orçamento ─────────────────────────────────
+  async function saveGoal(category, reais, rollover) {
     const cents = Math.round(parseFloat(String(reais).replace(/\./g, '').replace(',', '.')) * 100);
     if (!category || !isFinite(cents)) return;
     await fetch('/api/goals', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category, limit_cents: cents }),
+      body: JSON.stringify({ category, limit_cents: cents, ...(rollover !== undefined && { rollover }) }),
     });
     setGoalCat(''); setGoalVal('');
     await load();
@@ -275,6 +275,33 @@ export default function Dashboard() {
       .forEach(t => { map[t.category] = (map[t.category] || 0) - t.amount_cents; });
     return map;
   }, [txs, effMonth]);
+
+  // orçamento envelope: sobra/estouro do mês anterior ajusta o orçamento (rollover)
+  const prevMonth = effMonth ? addMonths(effMonth, -1) : '';
+  const prevSpentByCat = useMemo(() => {
+    const map = {};
+    (txs || []).filter(t => t.date.startsWith(prevMonth) && t.amount_cents < 0 && !t.transfer)
+      .forEach(t => { map[t.category] = (map[t.category] || 0) - t.amount_cents; });
+    return map;
+  }, [txs, prevMonth]);
+  const prevMonthHasData = useMemo(
+    () => (txs || []).some(t => t.date.startsWith(prevMonth)), [txs, prevMonth]);
+  const effectiveBudget = g => {
+    if (!g.rollover || !prevMonthHasData) return { budget: g.limit_cents, carry: 0 };
+    const carry = g.limit_cents - (prevSpentByCat[g.category] || 0);
+    return { budget: Math.max(g.limit_cents + carry, 0), carry };
+  };
+
+  // "pode gastar hoje": só no mês corrente de verdade
+  const dailyAllowance = useMemo(() => {
+    const now = new Date();
+    const realMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    if (!goals.length || effMonth !== realMonth) return null;
+    const totBudget = goals.reduce((s, g) => s + effectiveBudget(g).budget, 0);
+    const totSpent = goals.reduce((s, g) => s + (spentByCat[g.category] || 0), 0);
+    const daysLeft = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate() + 1;
+    return { remaining: totBudget - totSpent, perDay: (totBudget - totSpent) / daysLeft, daysLeft };
+  }, [goals, effMonth, spentByCat, prevSpentByCat, prevMonthHasData]);
 
   // evolução: últimos 6 meses com dados
   const evolution = useMemo(() => {
@@ -517,8 +544,26 @@ export default function Dashboard() {
           </div>
 
           <div className="panel">
-            <div className="panel-head"><h2>Metas · {monthLabel(effMonth || '2026-01').split(' de ')[0]}</h2></div>
+            <div className="panel-head">
+              <h2>Orçamento · {monthLabel(effMonth || '2026-01').split(' de ')[0]}</h2>
+              <a className="hbtn" style={{ height: 26, fontSize: 11.5, textDecoration: 'none' }}
+                href={`/relatorio?mes=${effMonth}`}>📄 Relatório</a>
+            </div>
             <div className="panel-body">
+              {dailyAllowance && (
+                <div style={{
+                  background: 'var(--surface-2)', borderRadius: 10, padding: '10px 12px',
+                  marginBottom: 12, fontSize: 13,
+                }}>
+                  {dailyAllowance.remaining >= 0 ? (
+                    <>Você pode gastar <b style={{ color: 'var(--green)' }}>{fmtBRL(Math.floor(dailyAllowance.perDay))}/dia</b>
+                    <span style={{ color: 'var(--muted)' }}> · {fmtBRL(dailyAllowance.remaining)} restantes ÷ {dailyAllowance.daysLeft} dias</span></>
+                  ) : (
+                    <>Orçamento estourado em <b style={{ color: 'var(--red)' }}>{fmtBRL(-dailyAllowance.remaining)}</b>
+                    <span style={{ color: 'var(--muted)' }}> — todo gasto extra sai do mês que vem</span></>
+                  )}
+                </div>
+              )}
               {goals.length === 0 && (
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>
                   Defina limites de gasto por categoria e acompanhe o progresso do mês.
@@ -526,16 +571,26 @@ export default function Dashboard() {
               )}
               {goals.map(g => {
                 const spent = spentByCat[g.category] || 0;
-                const pct = Math.min(spent / g.limit_cents * 100, 100);
-                const realPct = spent / g.limit_cents * 100;
+                const { budget, carry } = effectiveBudget(g);
+                const base = budget || 1;
+                const pct = Math.min(spent / base * 100, 100);
+                const realPct = spent / base * 100;
                 return (
                   <div key={g.category}>
                     <div className="goal-row">
                       <span className="name">
                         <span className="dot" style={{ background: categories[g.category] }} />
                         {emojis[g.category] ? `${emojis[g.category]} ` : ''}{g.category}
+                        <button className="goal-del"
+                          title={g.rollover
+                            ? `Rollover ativo: sobra/estouro do mês anterior ajusta o orçamento${carry ? ` (${carry > 0 ? '+' : ''}${fmtBRL(carry)} este mês)` : ''}`
+                            : 'Ativar rollover: sobra/estouro do mês anterior ajusta o orçamento'}
+                          style={{ color: g.rollover ? 'var(--accent)' : 'var(--muted)', opacity: g.rollover ? 1 : .5 }}
+                          onClick={() => saveGoal(g.category, (g.limit_cents / 100).toFixed(2).replace('.', ','), !g.rollover)}>↻</button>
                       </span>
-                      <span className="nums">{fmtBRL(spent)} / {fmtBRL(g.limit_cents)} ({realPct.toFixed(0)}%)</span>
+                      <span className="nums" title={carry ? `meta ${fmtBRL(g.limit_cents)} ${carry > 0 ? '+' : '−'} ${fmtBRL(Math.abs(carry))} do mês anterior` : undefined}>
+                        {fmtBRL(spent)} / {fmtBRL(budget)} ({realPct.toFixed(0)}%)
+                      </span>
                       <button className="goal-del" title="Remover meta"
                         onClick={() => saveGoal(g.category, '0')}>✕</button>
                     </div>

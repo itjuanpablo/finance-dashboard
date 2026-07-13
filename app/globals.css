@@ -390,6 +390,20 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 }
 .greeting-name:hover { border-bottom-color: var(--accent); color: var(--accent); }
 
+/* ── Impressão (relatório → PDF) ────────── */
+@media print {
+  .no-print { display: none !important; }
+  :root, html.dark {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f4f4f5;
+    --border: #d4d4d8; --text: #111111; --muted: #52525b;
+    --shadow: none;
+    --green: #15803d; --red: #b91c1c; --accent: #4338ca; --amber: #b45309;
+  }
+  body { background: #fff; }
+  .container { max-width: 100% !important; padding: 0 !important; }
+  .panel, .card { break-inside: avoid; box-shadow: none; }
+}
+
 /* ── Modo privacidade (olhinho) ─────────── */
 html.privacy .card-value,
 html.privacy .amount,
