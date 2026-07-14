@@ -29,10 +29,12 @@ html.dark {
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
+  /* fallback — a Inter oficial entra via next/font no layout */
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   background: var(--bg); color: var(--text);
   transition: background .25s, color .25s;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 .container { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
 
@@ -389,6 +391,55 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
   padding: 0; font-family: inherit; border-bottom: 1.5px dashed transparent;
 }
 .greeting-name:hover { border-bottom-color: var(--accent); color: var(--accent); }
+
+/* ── Polimento (v3.2) ───────────────────── */
+::selection { background: var(--accent-soft); }
+
+/* foco visível e consistente — teclado e acessibilidade */
+button:focus-visible, a:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+input:focus, select.control:focus, .cat-editor input:focus,
+.acc-form input:focus, .acc-form select:focus, .goal-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* toques de vida nos controles */
+.hbtn, .theme-toggle, .danger-btn, .pager button, .goal-form button {
+  transition: transform .12s ease, border-color .15s, background .15s, color .15s;
+}
+.hbtn:active, .theme-toggle:active, .danger-btn:active { transform: scale(.96); }
+.card, .insight-card { transition: transform .15s ease, box-shadow .15s ease; }
+.insight-card:hover { transform: translateY(-1px); }
+tbody tr td { transition: background .12s; }
+.dropzone { will-change: transform; }
+.dropzone.dragover { transform: scale(1.005); }
+
+/* entrada suave dos modais */
+.modal { animation: modalIn .18s ease-out; }
+@keyframes modalIn {
+  from { transform: translateY(10px) scale(.985); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* carregando com pulso, em vez de texto parado */
+.loading { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+/* barra de rolagem discreta, combinando com o tema */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* privacidade liga/desliga com transição, sem "estalo" */
+.card-value, .amount, .legend-item .val, .legend-item .pct,
+.donut-center .t, .goal-row .nums, .future-row .v,
+.sumbox-value, .acc-card .big, .insight-detail { transition: filter .18s ease; }
 
 /* ── Navegação inferior (só mobile) ─────── */
 .bottom-nav { display: none; }

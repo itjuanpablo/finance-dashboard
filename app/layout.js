@@ -1,6 +1,10 @@
 import './globals.css';
+import { Inter } from 'next/font/google';
 import PinGate from '@/components/PinGate';
 import BottomNav from '@/components/BottomNav';
+
+// Fonte oficial do app, embutida no build (sem requisições externas em runtime).
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata = {
   title: 'Fluxo — Finanças Pessoais',
@@ -28,7 +32,7 @@ try {
 export default function RootLayout({ children }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body>
+      <body className={inter.className}>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <PinGate>
           {children}
