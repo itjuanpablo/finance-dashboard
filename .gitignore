@@ -6,14 +6,14 @@ node_modules/
 data/
 *.log
 
-# scripts e docs: o conteúdo é versionado, os artefatos locais não
+# scripts/: o código é versionado (é onde vivem os testes), os artefatos não
 scripts/*
 !scripts/*.sh
 !scripts/*.mjs
+
+# docs/: pasta de trabalho local, não vai para o repositório.
+# `docs/i18n.md` é a exceção histórica, já está rastreado.
 docs/*
-!docs/*i18n.md
-
-
 # documentos de trabalho locais (nao versionar)
 ARQUITETURA.md
 prototipo.html
