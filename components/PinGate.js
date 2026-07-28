@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { t } from '@/lib/i18n';
 
 // PIN local: proteção de tela contra olhares casuais (celular emprestado,
 // aba aberta). Honestidade importante: os dados no disco NÃO são
@@ -14,21 +15,21 @@ async function sha256(text) {
 export async function configurePin() {
   const current = localStorage.getItem('fluxo-pin');
   if (current) {
-    const check = prompt('PIN atual:');
+    const check = prompt(t('pin.promptCurrent'));
     if (check === null) return null;
-    if (await sha256(check) !== current) return 'PIN atual incorreto';
+    if (await sha256(check) !== current) return t('pin.wrongCurrent');
   }
-  const next = prompt('Novo PIN (4+ dígitos; vazio remove):');
+  const next = prompt(t('pin.promptNew'));
   if (next === null) return null;
   if (next === '') {
     localStorage.removeItem('fluxo-pin');
     sessionStorage.removeItem('fluxo-unlocked');
-    return 'PIN removido';
+    return t('pin.removed');
   }
-  if (!/^\d{4,8}$/.test(next)) return 'Use de 4 a 8 dígitos';
+  if (!/^\d{4,8}$/.test(next)) return t('pin.lengthRule');
   localStorage.setItem('fluxo-pin', await sha256(next));
   sessionStorage.setItem('fluxo-unlocked', '1');
-  return 'PIN definido — será pedido ao abrir o app';
+  return t('pin.set');
 }
 
 export default function PinGate({ children }) {
@@ -64,11 +65,11 @@ export default function PinGate({ children }) {
       background: 'var(--bg)', padding: 20,
     }}>
       <div style={{ textAlign: 'center' }}>
-        <img src="/icon.svg" alt="Fluxo" width={64} height={64} style={{ borderRadius: 18, marginBottom: 16 }} />
-        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-.02em', marginBottom: 14 }}>Fluxo bloqueado</div>
+        <img src="/icon.svg" alt={t('app.name')} width={64} height={64} style={{ borderRadius: 18, marginBottom: 16 }} />
+        <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-.02em', marginBottom: 14 }}>{t('pin.locked')}</div>
         <input
           autoFocus type="password" inputMode="numeric" maxLength={8}
-          placeholder="PIN"
+          placeholder={t('pin.placeholder')}
           value={pin}
           onChange={e => {
             const v = e.target.value.replace(/\D/g, '');
@@ -86,7 +87,7 @@ export default function PinGate({ children }) {
             textAlign: 'center', letterSpacing: 8, outline: 0, fontFamily: 'inherit',
           }} />
         <div style={{ fontSize: 12, color: erro ? 'var(--red)' : 'var(--muted)', marginTop: 10 }}>
-          {erro ? 'PIN incorreto' : 'digite o PIN para entrar'}
+          {erro ? t('pin.wrong') : t('pin.hint')}
         </div>
       </div>
     </div>

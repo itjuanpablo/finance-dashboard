@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -48,7 +49,7 @@ function bindSources(db, sources, accountId) {
 export async function POST(request) {
   const { name, institution, kind, initial_cents, initial_date, sources } = await request.json();
   if (!name || !String(name).trim()) {
-    return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
+    return NextResponse.json({ error: t('api.nameRequired') }, { status: 400 });
   }
   const db = getDb();
   db.exec('BEGIN');
@@ -71,7 +72,7 @@ export async function PATCH(request) {
   const { id, name, institution, kind, initial_cents, initial_date, sources, archived } = await request.json();
   const db = getDb();
   if (!db.prepare('SELECT 1 FROM accounts WHERE id = ?').get(id)) {
-    return NextResponse.json({ error: 'Conta não encontrada' }, { status: 404 });
+    return NextResponse.json({ error: t('api.accountNotFound') }, { status: 404 });
   }
   db.exec('BEGIN');
   try {

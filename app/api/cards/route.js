@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -51,7 +52,7 @@ function bindSources(db, sources, cardId) {
 export async function POST(request) {
   const { name, last4, limit_cents, closing_day, due_day, sources } = await request.json();
   if (!name || !String(name).trim()) {
-    return NextResponse.json({ error: 'Nome obrigatório' }, { status: 400 });
+    return NextResponse.json({ error: t('api.nameRequired') }, { status: 400 });
   }
   const cd = Math.min(Math.max(Math.round(closing_day || 1), 1), 28);
   const dd = Math.min(Math.max(Math.round(due_day || 10), 1), 28);
@@ -76,7 +77,7 @@ export async function PATCH(request) {
   const { id, name, last4, limit_cents, closing_day, due_day, sources, archived } = await request.json();
   const db = getDb();
   if (!db.prepare('SELECT 1 FROM cards WHERE id = ?').get(id)) {
-    return NextResponse.json({ error: 'Cartão não encontrado' }, { status: 404 });
+    return NextResponse.json({ error: t('api.cardNotFound') }, { status: 404 });
   }
   db.exec('BEGIN');
   try {

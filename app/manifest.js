@@ -1,9 +1,11 @@
 // PWA: permite "Adicionar à Tela de Início" no celular com ícone e atalhos.
+import { t } from '@/lib/i18n';
+
 export default function manifest() {
   return {
-    name: 'Fluxo — Finanças Pessoais',
-    short_name: 'Fluxo',
-    description: 'Controle de gastos local, automatizado e minimalista',
+    name: t('app.title'),
+    short_name: t('app.name'),
+    description: t('app.description'),
     start_url: '/',
     display: 'standalone',
     background_color: '#0e0f13',
@@ -14,8 +16,8 @@ export default function manifest() {
     ],
     // pressionar e segurar o ícone do app → lançamento em 2 toques
     shortcuts: [
-      { name: 'Lançar despesa', url: '/?add=despesa', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
-      { name: 'Lançar receita', url: '/?add=receita', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
+      { name: t('app.shortcut.expense'), url: '/?add=despesa', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
+      { name: t('app.shortcut.income'), url: '/?add=receita', icons: [{ src: '/icon-192.png', sizes: '192x192' }] },
     ],
   };
 }

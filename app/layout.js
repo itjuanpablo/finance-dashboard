@@ -2,14 +2,16 @@ import './globals.css';
 import { Inter } from 'next/font/google';
 import PinGate from '@/components/PinGate';
 import BottomNav from '@/components/BottomNav';
+import { t } from '@/lib/i18n';
+import { REGION } from '@/lib/config';
 
 // Fonte oficial do app, embutida no build (sem requisições externas em runtime).
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata = {
-  title: 'Fluxo — Finanças Pessoais',
-  description: 'Controle de gastos local, automatizado e minimalista',
-  appleWebApp: { capable: true, title: 'Fluxo', statusBarStyle: 'black-translucent' },
+  title: t('app.title'),
+  description: t('app.description'),
+  appleWebApp: { capable: true, title: t('app.name'), statusBarStyle: 'black-translucent' },
 };
 
 export const viewport = {
@@ -31,7 +33,8 @@ try {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    // lang vem do locale da instância: muda o hífen, a leitura de tela e o Intl.
+    <html lang={REGION.htmlLang} suppressHydrationWarning>
       <body className={inter.className}>
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <PinGate>

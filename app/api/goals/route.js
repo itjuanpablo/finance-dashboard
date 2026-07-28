@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb, isValidCategory } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -11,13 +12,14 @@ export async function GET() {
 }
 
 // PUT: define/atualiza a meta de uma categoria; limite <= 0 remove a meta.
+// `category` é CHAVE (goals.category), validada contra categories.key.
 // rollover (opcional): sobra/estouro do mês anterior ajusta o orçamento do mês.
 export async function PUT(request) {
   const { category, limit_cents, rollover } = await request.json();
   const db = getDb();
   if (typeof limit_cents !== 'number' ||
       (limit_cents > 0 && !isValidCategory(db, category))) {
-    return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
+    return NextResponse.json({ error: t('api.invalidParams') }, { status: 400 });
   }
   if (limit_cents <= 0) {
     db.prepare('DELETE FROM goals WHERE category = ?').run(category);

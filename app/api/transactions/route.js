@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import crypto from 'crypto';
 import { getDb, categoryColors, isValidCategory } from '@/lib/db';
+import { CAT } from '@/lib/categories';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// Contrato v4: transactions.category guarda a CHAVE da categoria. Os mapas de
+// apoio (cor, emoji) são indexados pela mesma chave; o nome de exibição é
+// resolvido no cliente por makeCatLabeler.
 
 export async function GET() {
   const db = getDb();
@@ -14,8 +20,8 @@ export async function GET() {
     ORDER BY date DESC, id DESC
   `).all();
   const categoryEmojis = {};
-  db.prepare('SELECT name, emoji FROM categories WHERE archived = 0')
-    .all().forEach(c => { categoryEmojis[c.name] = c.emoji; });
+  db.prepare('SELECT key, emoji FROM categories WHERE archived = 0')
+    .all().forEach(c => { categoryEmojis[c.key] = c.emoji; });
   return NextResponse.json({ transactions, categories: categoryColors(db), categoryEmojis });
 }
 
@@ -26,14 +32,14 @@ export async function POST(request) {
   const desc = String(description || '').trim();
   const cents = Math.round(Number(amount_cents));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
-    return NextResponse.json({ error: 'Data inválida' }, { status: 400 });
+    return NextResponse.json({ error: t('api.invalidDate') }, { status: 400 });
   }
-  if (!desc) return NextResponse.json({ error: 'Descrição obrigatória' }, { status: 400 });
+  if (!desc) return NextResponse.json({ error: t('api.descRequired') }, { status: 400 });
   if (!isFinite(cents) || cents === 0) {
-    return NextResponse.json({ error: 'Valor inválido' }, { status: 400 });
+    return NextResponse.json({ error: t('api.invalidAmount') }, { status: 400 });
   }
   if (!isValidCategory(db, category)) {
-    return NextResponse.json({ error: 'Categoria inválida' }, { status: 400 });
+    return NextResponse.json({ error: t('api.invalidCategory') }, { status: 400 });
   }
   db.prepare(`
     INSERT INTO transactions (date, description, amount_cents, category, transfer, source, hash)
@@ -50,10 +56,10 @@ export async function POST(request) {
 export async function PATCH(request) {
   const body = await request.json();
   const { id } = body;
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: t('api.idRequired') }, { status: 400 });
   const db = getDb();
   const tx = db.prepare('SELECT * FROM transactions WHERE id = ?').get(id);
-  if (!tx) return NextResponse.json({ error: 'Transação não encontrada' }, { status: 404 });
+  if (!tx) return NextResponse.json({ error: t('api.txNotFound') }, { status: 404 });
 
   if (body.restore) {
     db.prepare(`
@@ -72,7 +78,7 @@ export async function PATCH(request) {
 
   if (body.category !== undefined) {
     if (!isValidCategory(db, body.category)) {
-      return NextResponse.json({ error: 'Categoria inválida' }, { status: 400 });
+      return NextResponse.json({ error: t('api.invalidCategory') }, { status: 400 });
     }
     sets.push('category = @category');
     args.category = body.category;
@@ -83,27 +89,27 @@ export async function PATCH(request) {
   }
   if (body.date !== undefined) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
-      return NextResponse.json({ error: 'Data inválida (use AAAA-MM-DD)' }, { status: 400 });
+      return NextResponse.json({ error: t('api.invalidDateFormat') }, { status: 400 });
     }
     if (tx.original_date == null) { sets.push('original_date = @od'); args.od = tx.date; }
     sets.push('date = @date'); args.date = body.date;
   }
   if (body.description !== undefined) {
     const d = String(body.description).trim();
-    if (!d) return NextResponse.json({ error: 'Descrição vazia' }, { status: 400 });
+    if (!d) return NextResponse.json({ error: t('api.descEmpty') }, { status: 400 });
     if (tx.original_description == null) { sets.push('original_description = @ode'); args.ode = tx.description; }
     sets.push('description = @description'); args.description = d;
   }
   if (body.amount_cents !== undefined) {
     const v = Math.round(Number(body.amount_cents));
     if (!isFinite(v) || v === 0) {
-      return NextResponse.json({ error: 'Valor inválido' }, { status: 400 });
+      return NextResponse.json({ error: t('api.invalidAmount') }, { status: 400 });
     }
     if (tx.original_amount_cents == null) { sets.push('original_amount_cents = @oa'); args.oa = tx.amount_cents; }
     sets.push('amount_cents = @amount'); args.amount = v;
   }
 
-  if (!sets.length) return NextResponse.json({ error: 'Nada para alterar' }, { status: 400 });
+  if (!sets.length) return NextResponse.json({ error: t('api.nothingToChange') }, { status: 400 });
   db.prepare(`UPDATE transactions SET ${sets.join(', ')} WHERE id = ${Number(id)}`).run(args);
 
   // regra opcional (mesmo comportamento de antes)
@@ -112,9 +118,10 @@ export async function PATCH(request) {
     const p = body.pattern.trim();
     db.prepare('INSERT INTO rules (pattern, category) VALUES (?, ?) ON CONFLICT(pattern) DO UPDATE SET category = excluded.category')
       .run(p, body.category);
+    // só recategoriza o que ainda está pendente de revisão (chave, não nome)
     const res = db.prepare(
-      "UPDATE transactions SET category = ? WHERE category = 'A revisar' AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE"
-    ).run(body.category, `%${p}%`);
+      'UPDATE transactions SET category = ? WHERE category = ? AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE'
+    ).run(body.category, CAT.TO_REVIEW, `%${p}%`);
     ruleApplied = res.changes;
   }
   return NextResponse.json({ ok: true, ruleApplied });

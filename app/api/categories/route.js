@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server';
-import { getDb, SYSTEM_CATEGORIES } from '@/lib/db';
+import { t } from '@/lib/i18n';
+import { getDb, categoryRows } from '@/lib/db';
+import { SYSTEM_CATEGORIES, slugifyCategory, normalizeName } from '@/lib/categories';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Contrato v4: `category` é sempre CHAVE (categories.key), nunca nome.
+// O nome de exibição vai como `label` — traduzido quando a chave é canônica,
+// digitado pelo usuário quando é customizada ou quando ele renomeou uma
+// canônica. Quem decide é catLabel() em lib/i18n, via categoryRows().
+
 export async function GET() {
   const db = getDb();
-  const cats = db.prepare(
-    'SELECT id, name, color, emoji, archived, sort_order FROM categories ORDER BY sort_order, id').all();
+  // includeArchived: a tela de gerenciar precisa listar as arquivadas para
+  // poder restaurá-las.
+  const cats = categoryRows(db, { includeArchived: true });
+
+  // Estatísticas agregadas por CHAVE — é o que transactions.category guarda.
   const stats = {};
   db.prepare(`
     SELECT category,
@@ -21,59 +31,77 @@ export async function GET() {
 
   const categories = cats.map(c => ({
     ...c,
-    system: SYSTEM_CATEGORIES.includes(c.name),
-    txCount: stats[c.name]?.n || 0,
-    monthlyAvg: stats[c.name]?.months ? Math.round(stats[c.name].spent / stats[c.name].months) : 0,
-    rulesCount: stats[c.name]?.rules || 0,
+    txCount: stats[c.key]?.n || 0,
+    monthlyAvg: stats[c.key]?.months ? Math.round(stats[c.key].spent / stats[c.key].months) : 0,
+    rulesCount: stats[c.key]?.rules || 0,
   }));
   return NextResponse.json({ categories });
 }
 
+// POST: cria categoria do usuário. A chave vem do slug do nome e `custom = 1`:
+// nome digitado por gente não se traduz.
 export async function POST(request) {
   const { name, color, emoji } = await request.json();
   const n = String(name || '').trim();
   if (n.length < 2 || !/^#[0-9a-fA-F]{6}$/.test(color || '')) {
-    return NextResponse.json({ error: 'Nome (mín. 2 letras) e cor são obrigatórios' }, { status: 400 });
+    return NextResponse.json({ error: t('manage.catErrName') }, { status: 400 });
   }
   const db = getDb();
+  const key = slugifyCategory(n);
+
+  // Colisão por chave OU por nome EXIBIDO. Comparar só contra categories.name
+  // não basta: numa instância es-AR a canônica `food` tem name 'Alimentação' no
+  // banco mas aparece como "Comida" — criar "Comida" geraria duas categorias
+  // indistinguíveis na tela.
+  const clash = categoryRows(db, { includeArchived: true }).some(c =>
+    c.key === key ||
+    normalizeName(c.label) === normalizeName(n) ||
+    normalizeName(c.name) === normalizeName(n));
+  if (clash) {
+    return NextResponse.json({ error: t('manage.catErrDuplicate') }, { status: 409 });
+  }
+
   try {
     const max = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories').get().m;
-    db.prepare('INSERT INTO categories (name, color, emoji, sort_order) VALUES (?, ?, ?, ?)')
-      .run(n, color, String(emoji || '').trim(), max + 1);
+    db.prepare(
+      'INSERT INTO categories (key, name, color, emoji, sort_order, custom) VALUES (?, ?, ?, ?, ?, 1)')
+      .run(key, n, color, String(emoji || '').trim(), max + 1);
   } catch {
-    return NextResponse.json({ error: 'Já existe uma categoria com esse nome' }, { status: 409 });
+    // rede de segurança para o UNIQUE de name/key (corrida entre duas abas)
+    return NextResponse.json({ error: t('manage.catErrDuplicate') }, { status: 409 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, key });
 }
 
-// PATCH: renomear (com cascata para transações, regras e metas), mudar cor/emoji, arquivar.
+// PATCH: renomear, mudar cor/emoji, arquivar.
+// Renomear NÃO cascateia mais: transações, regras e metas guardam a chave, e a
+// chave nunca muda. Numa canônica, renomear marca `custom = 1` — a tradução
+// deixa de se aplicar e o nome digitado passa a valer, com o dado intacto.
 export async function PATCH(request) {
   const { id, name, color, emoji, archived } = await request.json();
   const db = getDb();
   const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
-  if (!cat) return NextResponse.json({ error: 'Categoria não encontrada' }, { status: 404 });
-  const isSystem = SYSTEM_CATEGORIES.includes(cat.name);
+  if (!cat) return NextResponse.json({ error: t('manage.catNotFound') }, { status: 404 });
+  // bloqueio de sistema por CHAVE: o nome é editável (e traduzível), a chave não.
+  const isSystem = SYSTEM_CATEGORIES.includes(cat.key);
 
   db.exec('BEGIN');
   try {
-    if (name !== undefined && name.trim() !== cat.name) {
-      if (isSystem) throw new Error('Categoria de sistema não pode ser renomeada');
-      const n = name.trim();
-      if (n.length < 2) throw new Error('Nome muito curto');
-      db.prepare('UPDATE categories SET name = ? WHERE id = ?').run(n, id);
-      db.prepare('UPDATE transactions SET category = ? WHERE category = ?').run(n, cat.name);
-      db.prepare('UPDATE rules SET category = ? WHERE category = ?').run(n, cat.name);
-      db.prepare('UPDATE goals SET category = ? WHERE category = ?').run(n, cat.name);
+    if (name !== undefined && String(name).trim() !== cat.name) {
+      if (isSystem) throw new Error(t('manage.catSystemRename'));
+      const n = String(name).trim();
+      if (n.length < 2) throw new Error(t('manage.catErrShortName'));
+      db.prepare('UPDATE categories SET name = ?, custom = 1 WHERE id = ?').run(n, id);
     }
     if (color !== undefined) {
-      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error('Cor inválida');
+      if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new Error(t('manage.catErrColor'));
       db.prepare('UPDATE categories SET color = ? WHERE id = ?').run(color, id);
     }
     if (emoji !== undefined) {
       db.prepare('UPDATE categories SET emoji = ? WHERE id = ?').run(String(emoji).trim(), id);
     }
     if (archived !== undefined) {
-      if (isSystem) throw new Error('Categoria de sistema não pode ser arquivada');
+      if (isSystem) throw new Error(t('manage.catSystemArchive'));
       db.prepare('UPDATE categories SET archived = ? WHERE id = ?').run(archived ? 1 : 0, id);
     }
     db.exec('COMMIT');
@@ -84,30 +112,31 @@ export async function PATCH(request) {
   return NextResponse.json({ ok: true });
 }
 
-// DELETE: excluir categoria. Se tiver transações, exige destino (moveTo).
+// DELETE: excluir categoria. Se tiver transações, exige destino — `moveTo` é
+// CHAVE de outra categoria, não nome.
 export async function DELETE(request) {
   const { id, moveTo } = await request.json();
   const db = getDb();
   const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
-  if (!cat) return NextResponse.json({ error: 'Categoria não encontrada' }, { status: 404 });
-  if (SYSTEM_CATEGORIES.includes(cat.name)) {
-    return NextResponse.json({ error: 'Categoria de sistema não pode ser excluída' }, { status: 400 });
+  if (!cat) return NextResponse.json({ error: t('manage.catNotFound') }, { status: 404 });
+  if (SYSTEM_CATEGORIES.includes(cat.key)) {
+    return NextResponse.json({ error: t('manage.catSystemDelete') }, { status: 400 });
   }
   const txCount = db.prepare(
-    'SELECT COUNT(*) AS n FROM transactions WHERE category = ?').get(cat.name).n;
+    'SELECT COUNT(*) AS n FROM transactions WHERE category = ?').get(cat.key).n;
 
   db.exec('BEGIN');
   try {
     if (txCount > 0) {
       const dest = db.prepare(
-        'SELECT name FROM categories WHERE name = ? AND id != ?').get(moveTo || '', id);
+        'SELECT key FROM categories WHERE key = ? AND id != ?').get(moveTo || '', id);
       if (!dest) throw new Error(`${txCount} transações usam esta categoria — informe para onde movê-las`);
-      db.prepare('UPDATE transactions SET category = ? WHERE category = ?').run(dest.name, cat.name);
-      db.prepare('UPDATE rules SET category = ? WHERE category = ?').run(dest.name, cat.name);
+      db.prepare('UPDATE transactions SET category = ? WHERE category = ?').run(dest.key, cat.key);
+      db.prepare('UPDATE rules SET category = ? WHERE category = ?').run(dest.key, cat.key);
     } else {
-      db.prepare('DELETE FROM rules WHERE category = ?').run(cat.name);
+      db.prepare('DELETE FROM rules WHERE category = ?').run(cat.key);
     }
-    db.prepare('DELETE FROM goals WHERE category = ?').run(cat.name);
+    db.prepare('DELETE FROM goals WHERE category = ?').run(cat.key);
     db.prepare('DELETE FROM categories WHERE id = ?').run(id);
     db.exec('COMMIT');
   } catch (e) {
