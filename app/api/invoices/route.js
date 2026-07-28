@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb, categoryColors } from '@/lib/db';
+import { installmentOf, invoicePaymentRef } from '@/lib/parsers/labels';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -7,9 +9,10 @@ export const dynamic = 'force-dynamic';
 // Faturas são DERIVADAS das transações + ciclo de fechamento do cartão.
 // Parcelas carregam a data da compra original, então a parcela N é deslocada
 // N-1 meses para cair no ciclo em que de fato foi cobrada.
-
-const MONTHS_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+//
+// O mês do pagamento e o rótulo de parcela são lidos de lib/parsers/labels.js:
+// vêm da descrição gravada pelo banco, então aceitam português e espanhol
+// independente do idioma da interface.
 
 const pad = n => String(n).padStart(2, '0');
 const addMonthsYm = (y, m, k) => {
@@ -31,7 +34,7 @@ export async function GET(request) {
   const cardId = Number(new URL(request.url).searchParams.get('card_id'));
   const db = getDb();
   const card = db.prepare('SELECT * FROM cards WHERE id = ?').get(cardId);
-  if (!card) return NextResponse.json({ error: 'Cartão não encontrado' }, { status: 404 });
+  if (!card) return NextResponse.json({ error: t('api.cardNotFound') }, { status: 404 });
   const sources = db.prepare(
     'SELECT source FROM source_bindings WHERE card_id = ?').all(cardId).map(r => r.source);
   if (!sources.length) {
@@ -49,24 +52,27 @@ export async function GET(request) {
   const invoices = {}; // ref → { txs, total, paid, byCat }
   const get = ref => (invoices[ref] = invoices[ref] || { ref, txs: [], total_cents: 0, paid_cents: 0, by_category: {} });
 
-  for (const t of txs) {
+  // `tx`, não `t`: `t` agora é a função de tradução importada acima.
+  for (const tx of txs) {
     // pagamento de fatura: crédito vinculado pelo mês citado na descrição
-    const pay = t.description.match(/Pagamento da fatura de (\p{L}+)\/(\d{4})/iu);
-    if (pay && t.transfer) {
-      const mi = MONTHS_PT.indexOf(pay[1].toLowerCase());
-      if (mi >= 0) get(`${pay[2]}-${pad(mi + 1)}`).paid_cents += Math.abs(t.amount_cents);
-      continue;
+    if (tx.transfer) {
+      const payRef = invoicePaymentRef(tx.description);
+      if (payRef) {
+        get(payRef).paid_cents += Math.abs(tx.amount_cents);
+        continue;
+      }
     }
-    if (t.amount_cents >= 0 || t.transfer) continue;
+    if (tx.amount_cents >= 0 || tx.transfer) continue;
     // preferência: competência gravada na importação (exata);
     // fallback: janela por data com deslocamento de parcelas (aproximada)
-    const parc = t.description.match(/\(parcela (\d+)\/(\d+)\)$/);
-    const ref = t.invoice_ref
-      || refOf(t.date, card.closing_day, parc ? +parc[1] - 1 : 0);
+    const parc = installmentOf(tx.description);
+    const ref = tx.invoice_ref
+      || refOf(tx.date, card.closing_day, parc ? parc.n - 1 : 0);
     const inv = get(ref);
-    inv.txs.push(t);
-    inv.total_cents += -t.amount_cents;
-    inv.by_category[t.category] = (inv.by_category[t.category] || 0) - t.amount_cents;
+    inv.txs.push(tx);
+    inv.total_cents += -tx.amount_cents;
+    // by_category é indexado pela CHAVE da categoria (mesmo eixo de `categories`)
+    inv.by_category[tx.category] = (inv.by_category[tx.category] || 0) - tx.amount_cents;
   }
 
   const now = new Date();

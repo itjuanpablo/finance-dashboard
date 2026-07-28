@@ -1,36 +1,46 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { t, tn, catLabel } from '@/lib/i18n';
+import { CAT } from '@/lib/categories';
+import { stripInstallment } from '@/lib/parsers/labels';
+import { fmtMoney } from '@/lib/format';
 
-const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-// Prefixos operacionais que não identificam o estabelecimento
+// Prefixos operacionais que não identificam o estabelecimento.
+// As duas línguas ficam sempre ativas porque isto é texto do BANCO, não da
+// interface: um extrato brasileiro diz "Pagamento com QR Pix" mesmo numa
+// instância em espanhol, e vice-versa.
 const PREFIXES = [
+  // pt-BR
   /^pagamento com qr pix\s+/i, /^pagamento\s+/i, /^compra\s+/i,
   /^transferência pix recebida\s+/i, /^transferência pix enviada\s+/i,
   /^dinheiro (retirado|reservado)\s+/i,
+  // es-AR — Confiança: BAIXA, inferido; ajustar com extrato real
+  /^pago con qr\s+/i, /^pago\s+/i, /^compra en\s+/i,
+  /^transferencia (recibida|enviada)\s+/i, /^débito automático\s+/i,
 ];
 
 function merchantPattern(desc) {
-  let d = desc.replace(/\s*\(parcela \d+\/\d+\)$/, '').trim();
+  let d = stripInstallment(desc);
   for (const p of PREFIXES) d = d.replace(p, '');
   const words = d.split(/\s+/).slice(0, 2).join(' ').trim();
   return words.length >= 3 ? words : d.slice(0, 12).trim();
 }
 
-export default function RevisaoMassa({ txs, categories, onClose, onDone }) {
+// `label`: chave de categoria → nome exibido (ver LancamentoRapido).
+export default function RevisaoMassa({ txs, categories, label = catLabel, onClose, onDone }) {
   const [busy, setBusy] = useState(null);
 
   const groups = useMemo(() => {
     const map = {};
-    for (const t of txs) {
-      if (t.category !== 'A revisar') continue;
-      const pattern = merchantPattern(t.description);
+    for (const tx of txs) {
+      if (tx.category !== CAT.TO_REVIEW) continue;
+      const pattern = merchantPattern(tx.description);
       if (pattern.length < 3) continue;
       const key = pattern.toLowerCase();
-      const g = (map[key] = map[key] || { pattern, count: 0, cents: 0, sample: t.description });
+      const g = (map[key] = map[key] || { pattern, count: 0, cents: 0, sample: tx.description });
       g.count++;
-      g.cents += Math.abs(t.amount_cents);
+      g.cents += Math.abs(tx.amount_cents);
     }
     return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 25);
   }, [txs]);
@@ -47,7 +57,7 @@ export default function RevisaoMassa({ txs, categories, onClose, onDone }) {
     setBusy(null);
     onDone(d.error
       ? { error: d.error }
-      : { msg: `"${group.pattern}" → ${category} (${d.applied} transações + regra criada)` });
+      : { msg: t('review.applied', { pattern: group.pattern, cat: label(category), n: d.applied }) });
   }
 
   return (
@@ -55,26 +65,27 @@ export default function RevisaoMassa({ txs, categories, onClose, onDone }) {
       <div className="modal" style={{ maxWidth: 640 }}>
         <div className="modal-head">
           <div>
-            <h3>Revisão em massa</h3>
-            <p>Pendências agrupadas por estabelecimento. Escolher a categoria cria a regra e aplica a todo o grupo — importações futuras já vêm certas.</p>
+            <h3>{t('review.title')}</h3>
+            <p>{t('review.help')}</p>
           </div>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          {groups.length === 0 && <div className="empty">Nada a revisar. 🎉</div>}
+          {groups.length === 0 && <div className="empty">{t('review.empty')}</div>}
           {groups.map(g => (
             <div className="list-row" key={g.pattern}>
               <div className="grow">
                 <div style={{ fontWeight: 500 }}>{g.pattern}</div>
                 <div className="sub">
-                  {g.count} transaç{g.count > 1 ? 'ões' : 'ão'} · {fmtBRL(g.cents)}
-                  {g.sample.toLowerCase() !== g.pattern.toLowerCase() ? ` · ex: ${g.sample.slice(0, 44)}` : ''}
+                  {tn(g.count, 'import.tx')} · {fmtMoney(g.cents)}
+                  {g.sample.toLowerCase() !== g.pattern.toLowerCase()
+                    ? ` · ${t('review.sample', { s: g.sample.slice(0, 44) })}` : ''}
                 </div>
               </div>
               <select className="control" value="" disabled={busy === g.pattern}
                 onChange={e => assign(g, e.target.value)}>
-                <option value="">{busy === g.pattern ? 'Aplicando…' : 'Categorizar…'}</option>
-                {Object.keys(categories).map(c => <option key={c}>{c}</option>)}
+                <option value="">{busy === g.pattern ? t('review.applying') : t('review.pick')}</option>
+                {Object.keys(categories).map(c => <option key={c} value={c}>{label(c)}</option>)}
               </select>
             </div>
           ))}

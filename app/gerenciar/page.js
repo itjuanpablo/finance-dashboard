@@ -2,25 +2,24 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ContasAPagar from '@/components/ContasAPagar';
+import SeletorIdioma from '@/components/SeletorIdioma';
 import { configurePin } from '@/components/PinGate';
+import { t, tn } from '@/lib/i18n';
+import { CAT } from '@/lib/categories';
+import { stripInstallment } from '@/lib/parsers/labels';
+import {
+  fmtMoney, fmtDate, fmtMonthLong, currencySymbol, parseAmountToCents,
+} from '@/lib/format';
 
-const fmtBRL = c => (c / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-const monthLabel = ym => `${MONTH_NAMES[parseInt(ym.slice(5, 7)) - 1]} de ${ym.slice(0, 4)}`;
-const parseMoneyInput = s => {
-  const v = parseFloat(String(s).replace(/R\$\s?/g, '').replace(/\./g, '').replace(',', '.'));
-  return isFinite(v) ? Math.round(v * 100) : NaN;
-};
 const PALETTE = ['#f97316', '#3b82f6', '#8b5cf6', '#ec4899', '#a855f7', '#06b6d4',
   '#14b8a6', '#eab308', '#f43f5e', '#22c55e', '#64748b', '#94a3b8'];
 const TABS = [
-  ['lancamentos', '☰', 'Lançamentos'],
-  ['categorias', '🏷', 'Categorias'],
-  ['contas', '💳', 'Contas e cartões'],
-  ['apagar', '📅', 'Contas a pagar'],
-  ['regras', '🧠', 'Regras'],
-  ['importacoes', '🗂', 'Importações'],
+  ['lancamentos', '☰', 'manage.tab.tx'],
+  ['categorias', '🏷', 'manage.tab.cats'],
+  ['contas', '💳', 'manage.tab.accounts'],
+  ['apagar', '📅', 'bills.title'],
+  ['regras', '🧠', 'manage.tab.rules'],
+  ['importacoes', '🗂', 'import.batches'],
 ];
 
 let toastId = 0;
@@ -40,7 +39,7 @@ function EditableCell({ value, display, onSave, width }) {
   const [draft, setDraft] = useState('');
   if (!editing) {
     return (
-      <span className="cell-editable" title="Clique para editar"
+      <span className="cell-editable" title={t('manage.clickToEdit')}
         onClick={() => { setDraft(value); setEditing(true); }}>
         {display ?? value}
       </span>
@@ -72,12 +71,12 @@ export default function Gerenciar() {
 
   const toast = (msg, ico = '✓', undoFn = null, err = false) => {
     const id = ++toastId;
-    setToasts(t => [...t, { id, msg, ico, undoFn, err }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), undoFn ? 8000 : 4200);
+    setToasts(list => [...list, { id, msg, ico, undoFn, err }]);
+    setTimeout(() => setToasts(list => list.filter(x => x.id !== id)), undoFn ? 8000 : 4200);
   };
 
   async function loadAll() {
-    const [t, c, a, cd, r, b] = await Promise.all([
+    const [tx, c, a, cd, r, b] = await Promise.all([
       fetch('/api/transactions').then(x => x.json()),
       fetch('/api/categories').then(x => x.json()),
       fetch('/api/accounts').then(x => x.json()),
@@ -85,7 +84,7 @@ export default function Gerenciar() {
       fetch('/api/rules').then(x => x.json()),
       fetch('/api/batches').then(x => x.json()),
     ]);
-    setTxs(t.transactions); setColors(t.categories);
+    setTxs(tx.transactions); setColors(tx.categories);
     setCats(c.categories);
     setAccounts(a.accounts); setKnownSources(a.knownSources);
     setCards(cd.cards);
@@ -105,26 +104,29 @@ export default function Gerenciar() {
     window.history.replaceState(null, '', url);
   };
 
-  if (!txs) return <div className="container"><div className="loading">Carregando…</div></div>;
+  if (!txs) return <div className="container"><div className="loading">{t('common.loading')}</div></div>;
 
-  const activeCatNames = cats.filter(c => !c.archived).map(c => c.name);
+  // categoria é chave: os seletores levam `key` no value e `label` no texto
+  const activeCats = cats.filter(c => !c.archived);
+  const labelOf = key => cats.find(c => c.key === key)?.label ?? key;
 
   return (
     <div className="container">
       <header>
         <div className="logo" style={{ gap: 14 }}>
-          <a href="/" className="hbtn desk-only" style={{ textDecoration: 'none' }}>← Dashboard</a>
-          <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />Gerenciar</span>
+          <a href="/" className="hbtn desk-only" style={{ textDecoration: 'none' }}>← {t('nav.dashboard')}</a>
+          <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />{t('nav.manage')}</span>
         </div>
-        <button className="theme-toggle" title="Definir/alterar PIN de bloqueio" onClick={async () => {
+        <SeletorIdioma />
+        <button className="theme-toggle" title={t('pin.configTitle')} onClick={async () => {
           const msg = await configurePin();
           if (msg) alert(msg);
         }} style={{ marginRight: 8 }}>🔒</button>
-        <button className="theme-toggle" title="Modo privacidade: esconder valores" onClick={() => {
+        <button className="theme-toggle" title={t('common.privacyTitle')} onClick={() => {
           const on = document.documentElement.classList.toggle('privacy');
           try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}
         }} style={{ marginRight: 8 }}>👁</button>
-        <button className="theme-toggle" title="Alternar tema" onClick={() => {
+        <button className="theme-toggle" title={t('common.themeTitle')} onClick={() => {
           document.documentElement.classList.toggle('dark');
           try {
             localStorage.setItem('fluxo-theme',
@@ -135,10 +137,10 @@ export default function Gerenciar() {
 
       <div className="manage-layout">
         <nav className="manage-side">
-          {TABS.map(([k, ico, label]) => (
+          {TABS.map(([k, ico, labelKey]) => (
             <button key={k} className={`side-item ${tab === k ? 'active' : ''}`}
               onClick={() => switchTab(k)}>
-              <span>{ico}</span>{label}
+              <span>{ico}</span>{t(labelKey)}
               {k === 'regras' && rules.length > 0 && <span style={{ marginLeft: 'auto', fontSize: 11.5 }}>{rules.length}</span>}
             </button>
           ))}
@@ -146,7 +148,7 @@ export default function Gerenciar() {
 
         <div className="manage-content">
           {tab === 'lancamentos' && (
-            <Lancamentos txs={txs} colors={colors} activeCatNames={activeCatNames}
+            <Lancamentos txs={txs} colors={colors} activeCats={activeCats} labelOf={labelOf}
               accounts={accounts} toast={toast} reload={loadAll} />
           )}
           {tab === 'categorias' && (
@@ -163,33 +165,33 @@ export default function Gerenciar() {
             <div className="panel">
               <div className="panel-head" style={{ paddingBottom: 12 }}>
                 <div>
-                  <h2>Regras de categorização</h2>
+                  <h2>{t('manage.rulesTitle')}</h2>
                   <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                    Criadas quando você corrige uma transação. Excluir não altera o que já foi categorizado.
+                    {t('manage.rulesHelp')}
                   </p>
                 </div>
               </div>
               <div className="panel-body">
                 {rules.length === 0
-                  ? <div className="empty">Nenhuma regra ainda. Corrija uma transação "A revisar" para criar a primeira.</div>
+                  ? <div className="empty">{t('manage.rulesEmpty', { cat: t('cat.to_review') })}</div>
                   : rules.map(r => (
                     <div className="list-row" key={r.id}>
                       <div className="grow">
                         <div style={{ fontWeight: 500 }}>"{r.pattern}"</div>
-                        <div className="sub">contém no texto → categoria ao lado</div>
+                        <div className="sub">{t('manage.ruleSub')}</div>
                       </div>
                       <select className="control" value={r.category}
                         onChange={async e => {
                           await api('/api/rules', 'POST', { pattern: r.pattern, category: e.target.value });
                           await loadAll();
                         }}>
-                        {activeCatNames.map(c => <option key={c}>{c}</option>)}
+                        {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                       </select>
                       <button className="danger-btn" onClick={async () => {
                         await api('/api/rules', 'DELETE', { id: r.id });
-                        toast(`Regra removida: "${r.pattern.slice(0, 40)}"`, '🗑');
+                        toast(t('manage.ruleRemoved', { pattern: r.pattern.slice(0, 40) }), '🗑');
                         await loadAll();
-                      }}>Excluir</button>
+                      }}>{t('common.delete')}</button>
                     </div>
                   ))}
               </div>
@@ -199,27 +201,27 @@ export default function Gerenciar() {
             <div className="panel">
               <div className="panel-head" style={{ paddingBottom: 12 }}>
                 <div>
-                  <h2>Importações</h2>
+                  <h2>{t('import.batches')}</h2>
                   <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>
-                    Desfazer remove apenas as transações daquele lote.
+                    {t('import.batchesHelp')}
                   </p>
                 </div>
               </div>
               <div className="panel-body">
                 {batches.length === 0
-                  ? <div className="empty">Nenhuma importação ainda.</div>
+                  ? <div className="empty">{t('import.batchesEmpty')}</div>
                   : batches.map(b => (
                     <div className="list-row" key={b.id}>
                       <div className="grow">
                         <div style={{ fontWeight: 500 }}>{b.file_name}</div>
-                        <div className="sub">{b.kind} · {b.inserted} novas, {b.skipped} puladas · {b.imported_at}</div>
+                        <div className="sub">{t('import.batchSub', { kind: b.kind, inserted: b.inserted, skipped: b.skipped, at: b.imported_at })}</div>
                       </div>
                       <button className="danger-btn" onClick={async () => {
-                        if (!confirm(`Desfazer "${b.file_name}"? ${b.inserted} transações serão removidas.`)) return;
+                        if (!confirm(t('import.undoConfirm', { file: b.file_name, n: b.inserted }))) return;
                         const d = await api('/api/batches', 'DELETE', { id: b.id });
-                        toast(d.error || `Desfeita: ${d.removed} transações removidas`, d.error ? '⚠️' : '↩️', null, !!d.error);
+                        toast(d.error || t('import.undone', { n: d.removed }), d.error ? '⚠️' : '↩️', null, !!d.error);
                         await loadAll();
-                      }}>↩ Desfazer</button>
+                      }}>↩ {t('common.undo')}</button>
                     </div>
                   ))}
               </div>
@@ -229,15 +231,15 @@ export default function Gerenciar() {
       </div>
 
       <div className="toasts">
-        {toasts.map(t => (
-          <div key={t.id} className={`toast ${t.err ? 'err' : ''}`}>
-            <span className="ico">{t.ico}</span><span>{t.msg}</span>
-            {t.undoFn && (
+        {toasts.map(to => (
+          <div key={to.id} className={`toast ${to.err ? 'err' : ''}`}>
+            <span className="ico">{to.ico}</span><span>{to.msg}</span>
+            {to.undoFn && (
               <button className="hbtn" style={{ height: 28, fontSize: 12 }}
                 onClick={async () => {
-                  setToasts(x => x.filter(y => y.id !== t.id));
-                  await t.undoFn();
-                }}>Desfazer</button>
+                  setToasts(x => x.filter(y => y.id !== to.id));
+                  await to.undoFn();
+                }}>{t('common.undo')}</button>
             )}
           </div>
         ))}
@@ -247,7 +249,7 @@ export default function Gerenciar() {
 }
 
 // ═══ Lançamentos ═══════════════════════════════════════
-function Lancamentos({ txs, colors, activeCatNames, accounts, toast, reload }) {
+function Lancamentos({ txs, colors, activeCats, labelOf, accounts, toast, reload }) {
   const [month, setMonth] = useState('');
   const [cat, setCat] = useState('');
   const [type, setType] = useState('');
@@ -259,19 +261,19 @@ function Lancamentos({ txs, colors, activeCatNames, accounts, toast, reload }) {
   const [bulkCat, setBulkCat] = useState('');
 
   const months = useMemo(
-    () => [...new Set(txs.map(t => t.date.slice(0, 7)))].sort().reverse(), [txs]);
+    () => [...new Set(txs.map(tx => tx.date.slice(0, 7)))].sort().reverse(), [txs]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return txs
-      .filter(t => !month || t.date.startsWith(month))
-      .filter(t => !cat || t.category === cat)
-      .filter(t => !account || String(t.account_id) === account)
-      .filter(t => !q || t.description.toLowerCase().includes(q))
-      .filter(t => !type ||
-        (type === 'in' ? t.amount_cents > 0 && !t.transfer :
-         type === 'out' ? t.amount_cents < 0 && !t.transfer :
-         type === 'review' ? t.category === 'A revisar' : !!t.transfer));
+      .filter(tx => !month || tx.date.startsWith(month))
+      .filter(tx => !cat || tx.category === cat)
+      .filter(tx => !account || String(tx.account_id) === account)
+      .filter(tx => !q || tx.description.toLowerCase().includes(q))
+      .filter(tx => !type ||
+        (type === 'in' ? tx.amount_cents > 0 && !tx.transfer :
+         type === 'out' ? tx.amount_cents < 0 && !tx.transfer :
+         type === 'review' ? tx.category === CAT.TO_REVIEW : !!tx.transfer));
   }, [txs, month, cat, type, account, search]);
 
   const visible = rows.slice(0, limit);
@@ -279,23 +281,23 @@ function Lancamentos({ txs, colors, activeCatNames, accounts, toast, reload }) {
   const patch = async (id, body, undoBody, label) => {
     const d = await api('/api/transactions', 'PATCH', { id, ...body });
     if (d.error) return toast(d.error, '⚠️', null, true);
-    toast(label || 'Alterado', '✓', undoBody
+    toast(label || t('manage.changed'), '✓', undoBody
       ? async () => { await api('/api/transactions', 'PATCH', { id, ...undoBody }); await reload(); }
       : null);
     await reload();
   };
 
-  const toggleRow = (t, idx, shift) => {
+  const toggleRow = (tx, idx, shift) => {
     setSelected(prev => {
       const next = new Set(prev);
       if (shift && lastIdx != null) {
         const [a, b] = [Math.min(lastIdx, idx), Math.max(lastIdx, idx)];
-        const turnOn = !prev.has(t.id);
+        const turnOn = !prev.has(tx.id);
         for (let i = a; i <= b; i++) {
           turnOn ? next.add(visible[i].id) : next.delete(visible[i].id);
         }
       } else {
-        next.has(t.id) ? next.delete(t.id) : next.add(t.id);
+        next.has(tx.id) ? next.delete(tx.id) : next.add(tx.id);
       }
       return next;
     });
@@ -309,42 +311,42 @@ function Lancamentos({ txs, colors, activeCatNames, accounts, toast, reload }) {
     const undo = action === 'delete'
       ? async () => { await api('/api/transactions/bulk', 'POST', { ids, action: 'undelete' }); await reload(); }
       : null;
-    toast(`${d.changed} transações: ${label}`, '✓', undo);
+    toast(t('manage.bulkDone', { n: d.changed, what: label }), '✓', undo);
     setSelected(new Set());
     await reload();
   };
 
-  const allVisibleSelected = visible.length > 0 && visible.every(t => selected.has(t.id));
+  const allVisibleSelected = visible.length > 0 && visible.every(tx => selected.has(tx.id));
 
   return (
     <div className="panel">
       <div className="panel-head" style={{ paddingBottom: 12 }}>
-        <h2>Lançamentos <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 13 }}>· {rows.length}</span></h2>
-        <span style={{ fontSize: 12, color: 'var(--muted)' }}>clique numa célula para editar · shift+clique seleciona intervalo</span>
+        <h2>{t('manage.tab.tx')} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 13 }}>· {rows.length}</span></h2>
+        <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.txHint')}</span>
       </div>
       <div className="filters">
         <select className="control" value={month} onChange={e => setMonth(e.target.value)}>
-          <option value="">Todo o período</option>
-          {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          <option value="">{t('filter.allPeriod')}</option>
+          {months.map(m => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}
         </select>
         <select className="control" value={cat} onChange={e => setCat(e.target.value)}>
-          <option value="">Todas as categorias</option>
-          {activeCatNames.map(c => <option key={c}>{c}</option>)}
+          <option value="">{t('filter.allCategories')}</option>
+          {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
         </select>
         <select className="control" value={type} onChange={e => setType(e.target.value)}>
-          <option value="">Todos os tipos</option>
-          <option value="out">Só saídas</option>
-          <option value="in">Só entradas</option>
-          <option value="trf">Transferências</option>
-          <option value="review">A revisar</option>
+          <option value="">{t('filter.allTypes')}</option>
+          <option value="out">{t('filter.onlyOut')}</option>
+          <option value="in">{t('filter.onlyIn')}</option>
+          <option value="trf">{t('cat.transfers')}</option>
+          <option value="review">{t('cat.to_review')}</option>
         </select>
         {accounts.length > 0 && (
           <select className="control" value={account} onChange={e => setAccount(e.target.value)}>
-            <option value="">Todas as contas</option>
+            <option value="">{t('filter.allAccounts')}</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         )}
-        <div className="search">🔍<input placeholder="Buscar…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+        <div className="search">🔍<input placeholder={t('common.searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} /></div>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table>
@@ -354,59 +356,59 @@ function Lancamentos({ txs, colors, activeCatNames, accounts, toast, reload }) {
                 onChange={() => setSelected(prev => {
                   const next = new Set(prev);
                   allVisibleSelected
-                    ? visible.forEach(t => next.delete(t.id))
-                    : visible.forEach(t => next.add(t.id));
+                    ? visible.forEach(tx => next.delete(tx.id))
+                    : visible.forEach(tx => next.add(tx.id));
                   return next;
                 })} />
             </th>
-            <th>Data</th><th>Descrição</th><th>Categoria</th>
-            <th style={{ textAlign: 'right' }}>Valor</th>
+            <th>{t('common.date')}</th><th>{t('common.description')}</th><th>{t('common.category')}</th>
+            <th style={{ textAlign: 'right' }}>{t('common.value')}</th>
           </tr></thead>
           <tbody>
-            {visible.map((t, idx) => {
-              const color = colors[t.category] || '#999';
-              const edited = t.original_date != null || t.original_description != null || t.original_amount_cents != null;
+            {visible.map((tx, idx) => {
+              const color = colors[tx.category] || '#999';
+              const edited = tx.original_date != null || tx.original_description != null || tx.original_amount_cents != null;
               return (
-                <tr key={t.id} style={selected.has(t.id) ? { background: 'var(--accent-soft)' } : undefined}>
+                <tr key={tx.id} style={selected.has(tx.id) ? { background: 'var(--accent-soft)' } : undefined}>
                   <td>
-                    <input type="checkbox" checked={selected.has(t.id)}
-                      onClick={e => toggleRow(t, idx, e.shiftKey)} onChange={() => {}} />
+                    <input type="checkbox" checked={selected.has(tx.id)}
+                      onClick={e => toggleRow(tx, idx, e.shiftKey)} onChange={() => {}} />
                   </td>
                   <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-                    <EditableCell value={t.date} width={110}
-                      display={`${t.date.slice(8, 10)}/${t.date.slice(5, 7)}/${t.date.slice(2, 4)}`}
-                      onSave={v => patch(t.id, { date: v.trim() }, { date: t.date }, 'Data alterada')} />
+                    <EditableCell value={tx.date} width={110}
+                      display={fmtDate(tx.date)}
+                      onSave={v => patch(tx.id, { date: v.trim() }, { date: tx.date }, t('manage.dateChanged'))} />
                   </td>
                   <td className="desc">
-                    <EditableCell value={t.description}
-                      onSave={v => patch(t.id, { description: v }, { description: t.description }, 'Descrição alterada')} />
+                    <EditableCell value={tx.description}
+                      onSave={v => patch(tx.id, { description: v }, { description: tx.description }, t('manage.descChanged'))} />
                     {edited && (
-                      <span className="edited-mark" title="Editada manualmente — clique para restaurar o original"
-                        onClick={() => patch(t.id, { restore: true }, null, 'Original restaurado')}>· editada</span>
+                      <span className="edited-mark" title={t('manage.editedTitle')}
+                        onClick={() => patch(tx.id, { restore: true }, null, t('manage.origRestored'))}>· {t('manage.editedMark')}</span>
                     )}
-                    <small>{t.source}</small>
+                    <small>{tx.source}</small>
                   </td>
                   <td>
-                    <select className="badge-select" value={t.category}
+                    <select className="badge-select" value={tx.category}
                       style={{
                         background: `${color}22`, color,
-                        outline: t.category === 'A revisar' ? `1.5px dashed ${color}88` : 'none',
+                        outline: tx.category === CAT.TO_REVIEW ? `1.5px dashed ${color}88` : 'none',
                       }}
-                      onChange={e => patch(t.id, {
+                      onChange={e => patch(tx.id, {
                         category: e.target.value,
-                        createRule: t.category === 'A revisar',
-                        pattern: t.description.replace(/\s*\(parcela \d+\/\d+\)$/, '').trim(),
-                      }, { category: t.category }, `Categoria: ${e.target.value}`)}>
-                      {activeCatNames.map(c => <option key={c}>{c}</option>)}
+                        createRule: tx.category === CAT.TO_REVIEW,
+                        pattern: stripInstallment(tx.description),
+                      }, { category: tx.category }, t('manage.catChanged', { cat: labelOf(e.target.value) }))}>
+                      {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                     </select>
                   </td>
-                  <td className={`amount ${t.transfer ? 'trf' : t.amount_cents > 0 ? 'in' : 'out'}`}>
-                    <EditableCell value={(t.amount_cents / 100).toFixed(2).replace('.', ',')} width={90}
-                      display={`${t.amount_cents > 0 ? '+' : ''}${fmtBRL(t.amount_cents)}`}
+                  <td className={`amount ${tx.transfer ? 'trf' : tx.amount_cents > 0 ? 'in' : 'out'}`}>
+                    <EditableCell value={(tx.amount_cents / 100).toFixed(2).replace('.', ',')} width={90}
+                      display={`${tx.amount_cents > 0 ? '+' : ''}${fmtMoney(tx.amount_cents)}`}
                       onSave={v => {
-                        const cents = parseMoneyInput(v);
-                        if (!isFinite(cents) || cents === 0) return toast('Valor inválido', '⚠️', null, true);
-                        patch(t.id, { amount_cents: cents }, { amount_cents: t.amount_cents }, 'Valor alterado');
+                        const cents = parseAmountToCents(v);
+                        if (cents == null || cents === 0) return toast(t('common.invalidAmount'), '⚠️', null, true);
+                        patch(tx.id, { amount_cents: cents }, { amount_cents: tx.amount_cents }, t('manage.amountChanged'));
                       }} />
                   </td>
                 </tr>
@@ -414,26 +416,26 @@ function Lancamentos({ txs, colors, activeCatNames, accounts, toast, reload }) {
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <div className="empty">Nenhuma transação encontrada.</div>}
+        {rows.length === 0 && <div className="empty">{t('common.noTx')}</div>}
         {rows.length > limit && (
           <div className="pager">
-            <button onClick={() => setLimit(l => l + 200)}>Mostrar mais ({rows.length - limit} restantes)</button>
+            <button onClick={() => setLimit(l => l + 200)}>{t('common.showMore', { n: rows.length - limit })}</button>
           </div>
         )}
       </div>
       {selected.size > 0 && (
         <div className="bulk-bar">
-          <b>{selected.size} selecionada{selected.size > 1 ? 's' : ''}</b>
+          <b>{tn(selected.size, 'manage.selected')}</b>
           <select className="control" value={bulkCat} onChange={e => setBulkCat(e.target.value)}>
-            <option value="">Mudar categoria…</option>
-            {activeCatNames.map(c => <option key={c}>{c}</option>)}
+            <option value="">{t('manage.bulkCat')}</option>
+            {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
           </select>
           <button className="hbtn" style={{ height: 30 }} disabled={!bulkCat}
-            onClick={() => bulkCat && bulk('category', bulkCat, bulkCat)}>Aplicar</button>
+            onClick={() => bulkCat && bulk('category', bulkCat, labelOf(bulkCat))}>{t('common.apply')}</button>
           <button className="danger-btn" onClick={() => {
-            if (selected.size > 10 && !confirm(`Excluir ${selected.size} transações?`)) return;
-            bulk('delete', null, 'excluídas');
-          }}>Excluir</button>
+            if (selected.size > 10 && !confirm(t('manage.bulkDeleteConfirm', { n: selected.size }))) return;
+            bulk('delete', null, t('manage.bulkDeleted'));
+          }}>{t('common.delete')}</button>
           <button className="hbtn" style={{ height: 30 }} onClick={() => setSelected(new Set())}>✕</button>
         </div>
       )}
@@ -457,7 +459,7 @@ function Categorias({ cats, toast, reload }) {
       editing === 'new' ? draft : { id: editing, ...draft });
     if (d.error) return toast(d.error, '⚠️', null, true);
     setEditing(null); setAdding(false);
-    toast(editing === 'new' ? 'Categoria criada' : 'Categoria atualizada');
+    toast(editing === 'new' ? t('manage.catCreated') : t('manage.catUpdated'));
     await reload();
   };
 
@@ -466,7 +468,7 @@ function Categorias({ cats, toast, reload }) {
       <div style={{ display: 'flex', gap: 8 }}>
         <input style={{ width: 54, textAlign: 'center' }} placeholder="🏷" maxLength={4}
           value={draft.emoji ?? ''} onChange={e => setDraft(x => ({ ...x, emoji: e.target.value }))} />
-        <input style={{ flex: 1 }} placeholder="Nome da categoria" autoFocus
+        <input style={{ flex: 1 }} placeholder={t('manage.catName')} autoFocus
           value={draft.name ?? ''} onChange={e => setDraft(x => ({ ...x, name: e.target.value }))}
           onKeyDown={e => e.key === 'Enter' && save()} />
       </div>
@@ -477,9 +479,9 @@ function Categorias({ cats, toast, reload }) {
         ))}
       </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button className="hbtn" onClick={() => { setEditing(null); setAdding(false); }}>Cancelar</button>
+        <button className="hbtn" onClick={() => { setEditing(null); setAdding(false); }}>{t('common.cancel')}</button>
         <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
-          onClick={save}>Salvar</button>
+          onClick={save}>{t('common.save')}</button>
       </div>
     </div>
   );
@@ -487,11 +489,11 @@ function Categorias({ cats, toast, reload }) {
   return (
     <div className="panel">
       <div className="panel-head" style={{ paddingBottom: 12 }}>
-        <h2>Categorias</h2>
+        <h2>{t('manage.tab.cats')}</h2>
         <button className="hbtn" onClick={() => {
           setAdding(true); setEditing('new');
           setDraft({ name: '', color: PALETTE[0], emoji: '' });
-        }}>+ Nova categoria</button>
+        }}>+ {t('manage.newCat')}</button>
       </div>
       <div className="panel-body">
         {adding && editing === 'new' && <Editor />}
@@ -501,24 +503,25 @@ function Categorias({ cats, toast, reload }) {
               <span className="dot" style={{ background: c.color, width: 10, height: 10 }} />
               <span style={{ width: 24, textAlign: 'center' }}>{c.emoji}</span>
               <div className="grow">
-                <div style={{ fontWeight: 500 }}>{c.name}{c.system && <span style={{ color: 'var(--muted)', fontSize: 11, marginLeft: 6 }}>(sistema)</span>}</div>
+                <div style={{ fontWeight: 500 }}>{c.label}{c.system && <span style={{ color: 'var(--muted)', fontSize: 11, marginLeft: 6 }}>({t('manage.systemTag')})</span>}</div>
                 <div className="sub">
-                  {c.txCount} transações{c.monthlyAvg > 0 ? ` · ${fmtBRL(c.monthlyAvg)}/mês` : ''}{c.rulesCount ? ` · ${c.rulesCount} regra${c.rulesCount > 1 ? 's' : ''}` : ''}
+                  {tn(c.txCount, 'manage.txCount')}{c.monthlyAvg > 0 ? ` · ${t('manage.perMonth', { v: fmtMoney(c.monthlyAvg) })}` : ''}{c.rulesCount ? ` · ${tn(c.rulesCount, 'manage.rulesCount')}` : ''}
                 </div>
               </div>
               <button className="hbtn" style={{ height: 30 }} onClick={() => {
                 setEditing(c.id); setAdding(false);
-                setDraft({ name: c.name, color: c.color, emoji: c.emoji });
-              }}>Editar</button>
+                // parte do nome visível: renomear canônica desliga a tradução (v4)
+                setDraft({ name: c.label, color: c.color, emoji: c.emoji });
+              }}>{t('common.edit')}</button>
               {!c.system && (
                 <>
-                  <button className="hbtn" style={{ height: 30 }} title="Some dos seletores; histórico intacto"
+                  <button className="hbtn" style={{ height: 30 }} title={t('manage.archiveTitle')}
                     onClick={async () => {
                       await api('/api/categories', 'PATCH', { id: c.id, archived: true });
-                      toast(`"${c.name}" arquivada`, '📦');
+                      toast(t('manage.catArchived', { name: c.label }), '📦');
                       await reload();
-                    }}>Arquivar</button>
-                  <button className="danger-btn" onClick={() => { setDeleting(c.id); setMoveTo(''); }}>Excluir</button>
+                    }}>{t('common.archive')}</button>
+                  <button className="danger-btn" onClick={() => { setDeleting(c.id); setMoveTo(''); }}>{t('common.delete')}</button>
                 </>
               )}
             </div>
@@ -526,12 +529,12 @@ function Categorias({ cats, toast, reload }) {
             {deleting === c.id && (
               <div className="cat-editor" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13 }}>
-                  {c.txCount > 0 ? `Mover as ${c.txCount} transações para:` : 'Excluir categoria vazia?'}
+                  {c.txCount > 0 ? t('manage.moveTxTo', { n: c.txCount }) : t('manage.deleteEmptyCat')}
                 </span>
                 {c.txCount > 0 && (
                   <select className="control" value={moveTo} onChange={e => setMoveTo(e.target.value)}>
-                    <option value="">Escolher…</option>
-                    {active.filter(x => x.id !== c.id).map(x => <option key={x.id}>{x.name}</option>)}
+                    <option value="">{t('manage.choose')}</option>
+                    {active.filter(x => x.id !== c.id).map(x => <option key={x.id} value={x.key}>{x.label}</option>)}
                   </select>
                 )}
                 <button className="danger-btn" disabled={c.txCount > 0 && !moveTo}
@@ -539,25 +542,28 @@ function Categorias({ cats, toast, reload }) {
                     const d = await api('/api/categories', 'DELETE', { id: c.id, moveTo });
                     if (d.error) return toast(d.error, '⚠️', null, true);
                     setDeleting(null);
-                    toast(d.moved ? `Excluída — ${d.moved} transações movidas para ${moveTo}` : 'Categoria excluída', '🗑');
+                    const dest = active.find(x => x.key === moveTo)?.label ?? moveTo;
+                    toast(d.moved
+                      ? t('manage.catDeletedMoved', { n: d.moved, dest })
+                      : t('manage.catDeleted'), '🗑');
                     await reload();
-                  }}>Confirmar exclusão</button>
-                <button className="hbtn" style={{ height: 30 }} onClick={() => setDeleting(null)}>Cancelar</button>
+                  }}>{t('manage.confirmDelete')}</button>
+                <button className="hbtn" style={{ height: 30 }} onClick={() => setDeleting(null)}>{t('common.cancel')}</button>
               </div>
             )}
           </div>
         ))}
-        {archived.length > 0 && <div className="section-title">Arquivadas</div>}
+        {archived.length > 0 && <div className="section-title">{t('manage.archivedSection')}</div>}
         {archived.map(c => (
           <div className="list-row" key={c.id} style={{ opacity: .6 }}>
             <span className="dot" style={{ background: c.color, width: 10, height: 10 }} />
             <span style={{ width: 24, textAlign: 'center' }}>{c.emoji}</span>
-            <div className="grow"><div>{c.name}</div><div className="sub">{c.txCount} transações</div></div>
+            <div className="grow"><div>{c.label}</div><div className="sub">{tn(c.txCount, 'manage.txCount')}</div></div>
             <button className="hbtn" style={{ height: 30 }} onClick={async () => {
               await api('/api/categories', 'PATCH', { id: c.id, archived: false });
-              toast(`"${c.name}" restaurada`);
+              toast(t('manage.catRestored', { name: c.label }));
               await reload();
-            }}>Restaurar</button>
+            }}>{t('common.restore')}</button>
           </div>
         ))}
       </div>
@@ -575,14 +581,14 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
     const body = {
       ...(editAcc !== 'new' && { id: editAcc }),
       name: draft.name, institution: draft.institution, kind: draft.kind,
-      initial_cents: parseMoneyInput(draft.initial || '0') || 0,
+      initial_cents: parseAmountToCents(draft.initial || '0') || 0,
       initial_date: draft.initial_date || '1970-01-01',
       sources: draft.sources || [],
     };
     const d = await api('/api/accounts', editAcc === 'new' ? 'POST' : 'PATCH', body);
     if (d.error) return toast(d.error, '⚠️', null, true);
     setEditAcc(null);
-    toast('Conta salva — saldo recalculado');
+    toast(t('manage.accSaved'));
     await reload();
   };
 
@@ -590,7 +596,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
     const body = {
       ...(editCard !== 'new' && { id: editCard }),
       name: draft.name, last4: draft.last4,
-      limit_cents: parseMoneyInput(draft.limit || '0') || 0,
+      limit_cents: parseAmountToCents(draft.limit || '0') || 0,
       closing_day: parseInt(draft.closing_day) || 1,
       due_day: parseInt(draft.due_day) || 10,
       sources: draft.sources || [],
@@ -598,13 +604,13 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
     const d = await api('/api/cards', editCard === 'new' ? 'POST' : 'PATCH', body);
     if (d.error) return toast(d.error, '⚠️', null, true);
     setEditCard(null);
-    toast('Cartão salvo');
+    toast(t('manage.cardSaved'));
     await reload();
   };
 
   const SourcePicker = () => (
     <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 12, color: 'var(--muted)' }}>Origens vinculadas:</span>
+      <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.linkedSources')}</span>
       {knownSources.map(s => (
         <label key={s} className="src-check">
           <input type="checkbox" checked={(draft.sources || []).includes(s)}
@@ -617,7 +623,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
           {s}
         </label>
       ))}
-      {knownSources.length === 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>importe um arquivo primeiro</span>}
+      {knownSources.length === 0 && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.noSourcesYet')}</span>}
     </div>
   );
 
@@ -625,8 +631,8 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
     <>
       <div className="panel">
         <div className="panel-head" style={{ paddingBottom: 12 }}>
-          <h2>Contas</h2>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>saldo = inicial + movimentos das origens vinculadas</span>
+          <h2>{t('manage.accounts')}</h2>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.accHint')}</span>
         </div>
         <div className="panel-body">
           <div className="acc-grid">
@@ -634,11 +640,11 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
               <div className="acc-card" key={a.id}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <b>{a.name}</b>
-                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>{a.kind}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t(`manage.kind.${a.kind}`)}</span>
                 </div>
-                <div className="big">{fmtBRL(a.balance_cents)}</div>
+                <div className="big">{fmtMoney(a.balance_cents)}</div>
                 <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                  {a.institution}{a.sources.length ? ` · ${a.sources.join(', ')}` : ' · sem origem vinculada'}
+                  {a.institution}{a.sources.length ? ` · ${a.sources.join(', ')}` : ` · ${t('manage.noLinkedSource')}`}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={() => {
@@ -648,41 +654,41 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                       initial: (a.initial_cents / 100).toFixed(2).replace('.', ','),
                       initial_date: a.initial_date, sources: a.sources,
                     });
-                  }}>Editar</button>
+                  }}>{t('common.edit')}</button>
                   <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={async () => {
                     await api('/api/accounts', 'PATCH', { id: a.id, archived: true });
-                    toast('Conta arquivada', '📦'); await reload();
-                  }}>Arquivar</button>
+                    toast(t('manage.accArchived'), '📦'); await reload();
+                  }}>{t('common.archive')}</button>
                 </div>
               </div>
             ))}
             <button className="ghost-add" onClick={() => {
               setEditAcc('new'); setEditCard(null);
               setDraft({ name: '', institution: '', kind: 'corrente', initial: '0,00', initial_date: new Date().toISOString().slice(0, 10), sources: [] });
-            }}>+ conta</button>
+            }}>+ {t('manage.addAccount')}</button>
           </div>
           {editAcc && (
             <div className="cat-editor" style={{ marginTop: 12 }}>
               <div className="acc-form">
-                <input placeholder="Nome (ex: Mercado Pago)" value={draft.name ?? ''}
+                <input placeholder={t('manage.accNamePh')} value={draft.name ?? ''}
                   onChange={e => setDraft(x => ({ ...x, name: e.target.value }))} />
-                <input placeholder="Instituição" value={draft.institution ?? ''}
+                <input placeholder={t('manage.institution')} value={draft.institution ?? ''}
                   onChange={e => setDraft(x => ({ ...x, institution: e.target.value }))} />
                 <select value={draft.kind} onChange={e => setDraft(x => ({ ...x, kind: e.target.value }))}>
-                  <option value="corrente">Conta corrente</option>
-                  <option value="pagamento">Conta de pagamento</option>
-                  <option value="poupanca">Poupança</option>
+                  <option value="corrente">{t('manage.kind.corrente')}</option>
+                  <option value="pagamento">{t('manage.kind.pagamento')}</option>
+                  <option value="poupanca">{t('manage.kind.poupanca')}</option>
                 </select>
                 <span />
-                <input placeholder="Saldo inicial (R$)" value={draft.initial ?? ''}
+                <input placeholder={t('manage.initialBalance', { symbol: currencySymbol() })} value={draft.initial ?? ''}
                   onChange={e => setDraft(x => ({ ...x, initial: e.target.value }))} />
                 <input type="date" value={draft.initial_date ?? ''}
                   onChange={e => setDraft(x => ({ ...x, initial_date: e.target.value }))} />
                 <SourcePicker />
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="hbtn" onClick={() => setEditAcc(null)}>Cancelar</button>
-                <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={saveAcc}>Salvar</button>
+                <button className="hbtn" onClick={() => setEditAcc(null)}>{t('common.cancel')}</button>
+                <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={saveAcc}>{t('common.save')}</button>
               </div>
             </div>
           )}
@@ -691,8 +697,8 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
 
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="panel-head" style={{ paddingBottom: 12 }}>
-          <h2>Cartões de crédito</h2>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>fatura aberta = gastos das origens desde o último fechamento</span>
+          <h2>{t('manage.creditCards')}</h2>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.cardsHint')}</span>
         </div>
         <div className="panel-body">
           <div className="acc-grid">
@@ -702,20 +708,23 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                 <div className="acc-card" key={c.id}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <b>{c.name}{c.last4 ? ` ····${c.last4}` : ''}</b>
-                    <span style={{ color: 'var(--muted)', fontSize: 12 }}>fecha {c.closing_day} · vence {c.due_day}</span>
+                    <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t('manage.cardDays', { closing: c.closing_day, due: c.due_day })}</span>
                   </div>
-                  <div className="big">{fmtBRL(c.open_invoice_cents)} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>fatura aberta</span></div>
+                  <div className="big">{fmtMoney(c.open_invoice_cents)} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--muted)' }}>{t('cards.openInvoice')}</span></div>
                   {c.limit_cents > 0 && (
                     <>
                       <div className="goal-bar"><div style={{ width: `${pct}%`, background: pct < 80 ? 'var(--accent)' : 'var(--red)' }} /></div>
                       <div style={{ color: 'var(--muted)', fontSize: 12 }}>
-                        limite {fmtBRL(c.limit_cents)} · disponível ≈ {fmtBRL(Math.max(c.limit_cents - c.open_invoice_cents, 0))}
+                        {t('manage.cardLimitLine', {
+                          limit: fmtMoney(c.limit_cents),
+                          available: fmtMoney(Math.max(c.limit_cents - c.open_invoice_cents, 0)),
+                        })}
                       </div>
                     </>
                   )}
                   <div style={{ display: 'flex', gap: 8 }}>
                     <a className="hbtn" style={{ height: 28, fontSize: 12, textDecoration: 'none' }}
-                      href={`/cartoes?card=${c.id}`}>Faturas</a>
+                      href={`/cartoes?card=${c.id}`}>{t('nav.cards')}</a>
                     <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={() => {
                       setEditCard(c.id); setEditAcc(null);
                       setDraft({
@@ -723,11 +732,11 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                         limit: (c.limit_cents / 100).toFixed(2).replace('.', ','),
                         closing_day: c.closing_day, due_day: c.due_day, sources: c.sources,
                       });
-                    }}>Editar</button>
+                    }}>{t('common.edit')}</button>
                     <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={async () => {
                       await api('/api/cards', 'PATCH', { id: c.id, archived: true });
-                      toast('Cartão arquivado', '📦'); await reload();
-                    }}>Arquivar</button>
+                      toast(t('manage.cardArchived'), '📦'); await reload();
+                    }}>{t('common.archive')}</button>
                   </div>
                 </div>
               );
@@ -735,27 +744,27 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
             <button className="ghost-add" onClick={() => {
               setEditCard('new'); setEditAcc(null);
               setDraft({ name: '', last4: '', limit: '0,00', closing_day: 9, due_day: 15, sources: [] });
-            }}>+ cartão</button>
+            }}>+ {t('manage.addCard')}</button>
           </div>
           {editCard && (
             <div className="cat-editor" style={{ marginTop: 12 }}>
               <div className="acc-form">
-                <input placeholder="Nome (ex: MP Visa)" value={draft.name ?? ''}
+                <input placeholder={t('manage.cardNamePh')} value={draft.name ?? ''}
                   onChange={e => setDraft(x => ({ ...x, name: e.target.value }))} />
-                <input placeholder="4 últimos dígitos" maxLength={4} value={draft.last4 ?? ''}
+                <input placeholder={t('manage.last4')} maxLength={4} value={draft.last4 ?? ''}
                   onChange={e => setDraft(x => ({ ...x, last4: e.target.value }))} />
-                <input placeholder="Limite (R$)" value={draft.limit ?? ''}
+                <input placeholder={t('manage.cardLimitPh', { symbol: currencySymbol() })} value={draft.limit ?? ''}
                   onChange={e => setDraft(x => ({ ...x, limit: e.target.value }))} />
                 <span />
-                <input type="number" min={1} max={28} placeholder="Dia de fechamento" value={draft.closing_day ?? ''}
+                <input type="number" min={1} max={28} placeholder={t('manage.closingDay')} value={draft.closing_day ?? ''}
                   onChange={e => setDraft(x => ({ ...x, closing_day: e.target.value }))} />
-                <input type="number" min={1} max={28} placeholder="Dia de vencimento" value={draft.due_day ?? ''}
+                <input type="number" min={1} max={28} placeholder={t('manage.dueDay')} value={draft.due_day ?? ''}
                   onChange={e => setDraft(x => ({ ...x, due_day: e.target.value }))} />
                 <SourcePicker />
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button className="hbtn" onClick={() => setEditCard(null)}>Cancelar</button>
-                <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={saveCard}>Salvar</button>
+                <button className="hbtn" onClick={() => setEditCard(null)}>{t('common.cancel')}</button>
+                <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={saveCard}>{t('common.save')}</button>
               </div>
             </div>
           )}

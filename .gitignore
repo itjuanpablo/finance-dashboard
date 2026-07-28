@@ -4,10 +4,15 @@
 node_modules/
 .next/
 data/
-docs/
 *.log
 
-scripts/
+# scripts e docs: o conteúdo é versionado, os artefatos locais não
+scripts/*
+!scripts/*.sh
+!scripts/*.mjs
+docs/*
+!docs/*i18n.md
+
 
 # documentos de trabalho locais (nao versionar)
 ARQUITETURA.md

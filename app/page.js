@@ -3,32 +3,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { computeInsights } from '@/lib/insights';
 import RevisaoMassa from '@/components/RevisaoMassa';
+import SeletorIdioma from '@/components/SeletorIdioma';
 import LancamentoRapido from '@/components/LancamentoRapido';
+import { t, tn, makeCatLabeler } from '@/lib/i18n';
+import { CAT, NON_BUDGET_CATEGORIES } from '@/lib/categories';
+import { stripInstallment as stripParcela, installmentOf } from '@/lib/parsers/labels';
+import {
+  fmtMoney, fmtDayMonth, fmtMonthLong, fmtMonthShort,
+  currencySymbol, parseAmountToCents,
+} from '@/lib/format';
 
 const saudacao = () => {
   const h = new Date().getHours();
-  return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  return h < 12 ? t('dash.morning') : h < 18 ? t('dash.afternoon') : t('dash.evening');
 };
 
-const fmtBRL = cents =>
-  (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const fmtDate = iso => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-const MONTH_NAMES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
-  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
-const MONTH_SHORT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const monthLabel = ym => `${MONTH_NAMES[parseInt(ym.slice(5, 7)) - 1]} de ${ym.slice(0, 4)}`;
-const monthShort = ym => MONTH_SHORT[parseInt(ym.slice(5, 7)) - 1];
 const addMonths = (ym, k) => {
   const y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + k;
   return `${y + Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, '0')}`;
 };
-const stripParcela = d => d.replace(/\s*\(parcela \d+\/\d+\)$/, '').trim();
 
 let toastId = 0;
 
 export default function Dashboard() {
   const [txs, setTxs] = useState(null);
   const [categories, setCategories] = useState({});
+  const [catList, setCatList] = useState([]);
   const [goals, setGoals] = useState([]);
   const [cards, setCards] = useState([]);
   const [rules, setRules] = useState([]);
@@ -54,29 +54,33 @@ export default function Dashboard() {
   const [goalVal, setGoalVal] = useState('');
   const fileRef = useRef(null);
 
+  // categoria circula como CHAVE; o nome exibido vem da lista da API
+  const labelOf = useMemo(() => makeCatLabeler(catList), [catList]);
+
   const toast = (msg, ico = '✓', err = false) => {
     const id = ++toastId;
-    setToasts(t => [...t, { id, msg, ico, err }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
+    setToasts(list => [...list, { id, msg, ico, err }]);
+    setTimeout(() => setToasts(list => list.filter(x => x.id !== id)), 4200);
   };
 
   async function load(selectLatestMonth = false) {
-    const [tRes, gRes, rRes, bRes, cRes, biRes] = await Promise.all([
+    const [tRes, gRes, rRes, bRes, cRes, biRes, catRes] = await Promise.all([
       fetch('/api/transactions'), fetch('/api/goals'),
       fetch('/api/rules'), fetch('/api/batches'), fetch('/api/cards'),
-      fetch('/api/bills'),
+      fetch('/api/bills'), fetch('/api/categories'),
     ]);
     setBillOccurrences((await biRes.json()).occurrences || []);
-    const t = await tRes.json();
-    setTxs(t.transactions);
-    setCategories(t.categories);
-    setEmojis(t.categoryEmojis || {});
+    const tx = await tRes.json();
+    setTxs(tx.transactions);
+    setCategories(tx.categories);
+    setEmojis(tx.categoryEmojis || {});
+    setCatList((await catRes.json()).categories || []);
     setGoals((await gRes.json()).goals);
     setRules((await rRes.json()).rules);
     setBatches((await bRes.json()).batches);
     setCards((await cRes.json()).cards);
-    if (selectLatestMonth && t.transactions.length) {
-      setMonth(m => m || t.transactions[0].date.slice(0, 7));
+    if (selectLatestMonth && tx.transactions.length) {
+      setMonth(m => m || tx.transactions[0].date.slice(0, 7));
     }
   }
   useEffect(() => {
@@ -100,7 +104,7 @@ export default function Dashboard() {
   }, []);
 
   const editName = () => {
-    const n = prompt('Como você quer ser chamado?', userName || '');
+    const n = prompt(t('dash.namePrompt'), userName || '');
     if (n === null) return;
     setUserName(n.trim());
     try { localStorage.setItem('fluxo-nome', n.trim()); } catch (e) {}
@@ -117,10 +121,10 @@ export default function Dashboard() {
 
   const insights = useMemo(() => {
     if (!txs || !dismissed) return [];
-    return computeInsights({ transactions: txs, goals, cards, billOccurrences })
+    return computeInsights({ transactions: txs, goals, cards, billOccurrences, catLabel: labelOf })
       .filter(i => !dismissed.has(i.id))
       .slice(0, 3);
-  }, [txs, goals, cards, billOccurrences, dismissed]);
+  }, [txs, goals, cards, billOccurrences, dismissed, labelOf]);
 
   // vencimentos a exibir: atrasadas + próximas 45 dias, não pagas
   const upcomingBills = useMemo(() => {
@@ -136,7 +140,7 @@ export default function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bill_id: o.bill_id, ref: o.ref, paid: true }),
     });
-    toast(`${o.description} (${o.ref}) marcada como paga`, '✅');
+    toast(t('bills.markedPaid', { desc: o.description, ref: o.ref }), '✅');
     await load();
   }
 
@@ -153,36 +157,42 @@ export default function Dashboard() {
       clearInterval(tick); setProgress(100);
       if (error) toast(error, '⚠️', true);
       for (const r of results || []) {
-        if (r.error) toast(`${r.fileName}: ${r.error}`, '⚠️', true);
-        else toast(
-          `${r.fileName}: ${r.inserted} novas` +
-          (r.skipped ? `, ${r.skipped} já existiam` : '') +
-          (r.toReview ? ` · ${r.toReview} a revisar` : ''), '✅');
+        if (r.error) { toast(`${r.fileName}: ${r.error}`, '⚠️', true); continue; }
+        toast(
+          t('import.result', { file: r.fileName, inserted: r.inserted, skipped: r.skipped }) +
+          (r.toReview ? ` · ${tn(r.toReview, 'import.toReview')}` : ''), '✅');
+        // Confiança baixa e encoding exótico são justamente os casos em que o
+        // número pode estar errado: dizer qual perfil leu o arquivo dá ao
+        // usuário a chance de desconfiar antes de tomar decisão com o dado.
+        if (r.bank && r.confidence && r.confidence !== 'alta') {
+          toast(`${r.bank} — ${t(`import.confidence.${r.confidence}`)}`, 'ℹ️');
+        }
+        for (const w of r.warnings || []) toast(w, '⚠️', true);
       }
       await load(true);
     } catch (e) {
       clearInterval(tick);
-      toast('Falha na importação: ' + e.message, '⚠️', true);
+      toast(t('import.fail', { msg: e.message }), '⚠️', true);
     } finally {
       setTimeout(() => { setBusy(false); setProgress(0); }, 600);
     }
   }
 
   async function undoBatch(b) {
-    if (!confirm(`Desfazer a importação de "${b.file_name}"? ${b.inserted} transações serão removidas.`)) return;
+    if (!confirm(t('import.undoConfirm', { file: b.file_name, n: b.inserted }))) return;
     const res = await fetch('/api/batches', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: b.id }),
     });
     const data = await res.json();
-    toast(data.error || `Importação desfeita: ${data.removed} transações removidas`, data.error ? '⚠️' : '↩️', !!data.error);
+    toast(data.error || t('import.undone', { n: data.removed }), data.error ? '⚠️' : '↩️', !!data.error);
     await load();
   }
 
   // ── Recategorização (+ regra automática) ──────────────
   async function changeCategory(tx, category) {
-    const fromReview = tx.category === 'A revisar';
+    const fromReview = tx.category === CAT.TO_REVIEW;
     const pattern = stripParcela(tx.description);
     const res = await fetch('/api/transactions', {
       method: 'PATCH',
@@ -191,8 +201,8 @@ export default function Dashboard() {
     });
     const data = await res.json();
     if (fromReview) {
-      toast(`Regra criada: "${pattern.slice(0, 40)}" → ${category}` +
-        (data.ruleApplied > 1 ? ` (aplicada a ${data.ruleApplied} transações)` : ''), '🧠');
+      toast(t('dash.ruleCreated', { pattern: pattern.slice(0, 40), cat: labelOf(category) }) +
+        (data.ruleApplied > 1 ? ` ${t('dash.ruleApplied', { n: data.ruleApplied })}` : ''), '🧠');
     }
     await load();
   }
@@ -212,14 +222,14 @@ export default function Dashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: rule.id }),
     });
-    toast(`Regra removida: "${rule.pattern.slice(0, 40)}"`, '🗑');
+    toast(t('manage.ruleRemoved', { pattern: rule.pattern.slice(0, 40) }), '🗑');
     await load();
   }
 
   // ── Metas / Orçamento ─────────────────────────────────
   async function saveGoal(category, reais, rollover) {
-    const cents = Math.round(parseFloat(String(reais).replace(/\./g, '').replace(',', '.')) * 100);
-    if (!category || !isFinite(cents)) return;
+    const cents = parseAmountToCents(reais);
+    if (!category || cents == null) return;
     await fetch('/api/goals', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -231,50 +241,50 @@ export default function Dashboard() {
 
   // ── Exportar CSV ──────────────────────────────────────
   function exportCsv(rowsToExport) {
-    const head = 'data;descricao;categoria;valor;origem';
-    const lines = rowsToExport.map(t =>
-      `${t.date};"${t.description.replace(/"/g, '""')}";${t.category};${(t.amount_cents / 100).toFixed(2).replace('.', ',')};${t.source}`);
+    const head = t('export.csvHead');
+    const lines = rowsToExport.map(tx =>
+      `${tx.date};"${tx.description.replace(/"/g, '""')}";${labelOf(tx.category)};${(tx.amount_cents / 100).toFixed(2).replace('.', ',')};${tx.source}`);
     const blob = new Blob(['﻿' + [head, ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `fluxo-${month || 'tudo'}.csv`;
+    a.download = `fluxo-${month || t('export.all')}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast(`${rowsToExport.length} transações exportadas`, '⬇️');
+    toast(t('export.done', { n: rowsToExport.length }), '⬇️');
   }
 
   // ── Derivados ─────────────────────────────────────────
   const months = useMemo(() => {
     if (!txs) return [];
-    return [...new Set(txs.map(t => t.date.slice(0, 7)))].sort().reverse();
+    return [...new Set(txs.map(tx => tx.date.slice(0, 7)))].sort().reverse();
   }, [txs]);
 
   const effMonth = month || months[0] || '';
 
   const monthTxs = useMemo(() => {
     if (!txs) return [];
-    return month ? txs.filter(t => t.date.startsWith(month)) : txs;
+    return month ? txs.filter(tx => tx.date.startsWith(month)) : txs;
   }, [txs, month]);
 
   const summary = useMemo(() => {
-    const real = monthTxs.filter(t => !t.transfer);
-    const totIn = real.filter(t => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0);
-    const totOut = real.filter(t => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0);
+    const real = monthTxs.filter(tx => !tx.transfer);
+    const totIn = real.filter(tx => tx.amount_cents > 0).reduce((s, tx) => s + tx.amount_cents, 0);
+    const totOut = real.filter(tx => tx.amount_cents < 0).reduce((s, tx) => s - tx.amount_cents, 0);
     const now = new Date();
     const isCurrent = month === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const daysIn = month ? new Date(+month.slice(0, 4), +month.slice(5, 7), 0).getDate() : 30;
     const proj = isCurrent && now.getDate() > 0 ? totOut / now.getDate() * daysIn : null;
     return {
       totIn, totOut, bal: totIn - totOut, proj,
-      nIn: real.filter(t => t.amount_cents > 0).length,
-      nOut: real.filter(t => t.amount_cents < 0).length,
+      nIn: real.filter(tx => tx.amount_cents > 0).length,
+      nOut: real.filter(tx => tx.amount_cents < 0).length,
     };
   }, [monthTxs, month]);
 
   const donut = useMemo(() => {
     const spent = {};
-    monthTxs.filter(t => t.amount_cents < 0 && !t.transfer)
-      .forEach(t => { spent[t.category] = (spent[t.category] || 0) - t.amount_cents; });
+    monthTxs.filter(tx => tx.amount_cents < 0 && !tx.transfer)
+      .forEach(tx => { spent[tx.category] = (spent[tx.category] || 0) - tx.amount_cents; });
     const entries = Object.entries(spent).sort((a, b) => b[1] - a[1]);
     const total = entries.reduce((s, [, v]) => s + v, 0);
     return { entries, total };
@@ -283,8 +293,8 @@ export default function Dashboard() {
   // gasto por categoria no mês efetivo (para metas)
   const spentByCat = useMemo(() => {
     const map = {};
-    (txs || []).filter(t => t.date.startsWith(effMonth) && t.amount_cents < 0 && !t.transfer)
-      .forEach(t => { map[t.category] = (map[t.category] || 0) - t.amount_cents; });
+    (txs || []).filter(tx => tx.date.startsWith(effMonth) && tx.amount_cents < 0 && !tx.transfer)
+      .forEach(tx => { map[tx.category] = (map[tx.category] || 0) - tx.amount_cents; });
     return map;
   }, [txs, effMonth]);
 
@@ -292,12 +302,12 @@ export default function Dashboard() {
   const prevMonth = effMonth ? addMonths(effMonth, -1) : '';
   const prevSpentByCat = useMemo(() => {
     const map = {};
-    (txs || []).filter(t => t.date.startsWith(prevMonth) && t.amount_cents < 0 && !t.transfer)
-      .forEach(t => { map[t.category] = (map[t.category] || 0) - t.amount_cents; });
+    (txs || []).filter(tx => tx.date.startsWith(prevMonth) && tx.amount_cents < 0 && !tx.transfer)
+      .forEach(tx => { map[tx.category] = (map[tx.category] || 0) - tx.amount_cents; });
     return map;
   }, [txs, prevMonth]);
   const prevMonthHasData = useMemo(
-    () => (txs || []).some(t => t.date.startsWith(prevMonth)), [txs, prevMonth]);
+    () => (txs || []).some(tx => tx.date.startsWith(prevMonth)), [txs, prevMonth]);
   const effectiveBudget = g => {
     if (!g.rollover || !prevMonthHasData) return { budget: g.limit_cents, carry: 0 };
     const carry = g.limit_cents - (prevSpentByCat[g.category] || 0);
@@ -319,11 +329,11 @@ export default function Dashboard() {
   const evolution = useMemo(() => {
     const asc = [...months].sort().slice(-6);
     return asc.map(ym => {
-      const mts = (txs || []).filter(t => t.date.startsWith(ym) && !t.transfer);
+      const mts = (txs || []).filter(tx => tx.date.startsWith(ym) && !tx.transfer);
       return {
         ym,
-        in: mts.filter(t => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0),
-        out: mts.filter(t => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0),
+        in: mts.filter(tx => tx.amount_cents > 0).reduce((s, tx) => s + tx.amount_cents, 0),
+        out: mts.filter(tx => tx.amount_cents < 0).reduce((s, tx) => s - tx.amount_cents, 0),
       };
     });
   }, [txs, months]);
@@ -332,15 +342,14 @@ export default function Dashboard() {
   const future = useMemo(() => {
     const map = {};
     const nowYm = new Date().toISOString().slice(0, 7);
-    for (const t of txs || []) {
-      const m = t.description.match(/\(parcela (\d+)\/(\d+)\)$/);
-      if (!m || t.amount_cents >= 0) continue;
-      const [, num, tot] = m.map(Number);
-      for (let k = 1; k <= tot - num; k++) {
-        const ym = addMonths(t.date.slice(0, 7), k);
+    for (const tx of txs || []) {
+      const parc = installmentOf(tx.description);
+      if (!parc || tx.amount_cents >= 0) continue;
+      for (let k = 1; k <= parc.total - parc.n; k++) {
+        const ym = addMonths(tx.date.slice(0, 7), k);
         if (ym <= nowYm) continue; // parcela já deve ter aparecido em fatura importada
         map[ym] = map[ym] || { cents: 0, n: 0 };
-        map[ym].cents += -t.amount_cents;
+        map[ym].cents += -tx.amount_cents;
         map[ym].n++;
       }
     }
@@ -350,23 +359,23 @@ export default function Dashboard() {
   // recorrências: mesma despesa, valor estável, >= 3 meses distintos
   const recurring = useMemo(() => {
     const groups = {};
-    for (const t of txs || []) {
-      if (t.amount_cents >= 0 || t.transfer) continue;
-      const key = stripParcela(t.description).toLowerCase();
-      (groups[key] = groups[key] || []).push(t);
+    for (const tx of txs || []) {
+      if (tx.amount_cents >= 0 || tx.transfer) continue;
+      const key = stripParcela(tx.description).toLowerCase();
+      (groups[key] = groups[key] || []).push(tx);
     }
     const rec = new Map(); // desc → aviso de mudança de valor (ou null)
     for (const [key, list] of Object.entries(groups)) {
-      const ms = new Set(list.map(t => t.date.slice(0, 7)));
+      const ms = new Set(list.map(tx => tx.date.slice(0, 7)));
       if (ms.size < 3 || list.length / ms.size > 2) continue;
-      const vals = list.map(t => -t.amount_cents).sort((a, b) => a - b);
+      const vals = list.map(tx => -tx.amount_cents).sort((a, b) => a - b);
       const median = vals[Math.floor(vals.length / 2)];
       if ((vals[vals.length - 1] - vals[0]) / median > 0.25) continue;
       const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
       const last = -sorted[sorted.length - 1].amount_cents;
       const prev = sorted.length > 1 ? -sorted[sorted.length - 2].amount_cents : last;
       const changed = Math.abs(last - prev) / prev > 0.05
-        ? `valor mudou: ${fmtBRL(prev)} → ${fmtBRL(last)}` : null;
+        ? t('dash.recChanged', { prev: fmtMoney(prev), last: fmtMoney(last) }) : null;
       rec.set(key, changed);
     }
     return rec;
@@ -375,18 +384,18 @@ export default function Dashboard() {
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return monthTxs
-      .filter(t => !q || t.description.toLowerCase().includes(q))
-      .filter(t => !catFilter || t.category === catFilter)
-      .filter(t => !typeFilter ||
-        (typeFilter === 'in' ? t.amount_cents > 0 && !t.transfer :
-         typeFilter === 'out' ? t.amount_cents < 0 && !t.transfer :
-         typeFilter === 'review' ? t.category === 'A revisar' : !!t.transfer));
+      .filter(tx => !q || tx.description.toLowerCase().includes(q))
+      .filter(tx => !catFilter || tx.category === catFilter)
+      .filter(tx => !typeFilter ||
+        (typeFilter === 'in' ? tx.amount_cents > 0 && !tx.transfer :
+         typeFilter === 'out' ? tx.amount_cents < 0 && !tx.transfer :
+         typeFilter === 'review' ? tx.category === CAT.TO_REVIEW : !!tx.transfer));
   }, [monthTxs, search, catFilter, typeFilter]);
 
   const reviewCount = useMemo(
-    () => (txs || []).filter(t => t.category === 'A revisar').length, [txs]);
+    () => (txs || []).filter(tx => tx.category === CAT.TO_REVIEW).length, [txs]);
 
-  if (!txs) return <div className="container"><div className="loading">Carregando…</div></div>;
+  if (!txs) return <div className="container"><div className="loading">{t('common.loading')}</div></div>;
 
   // ── Donut geometria ───────────────────────────────────
   const R = 82, C = 2 * Math.PI * R, GAP = 2.5;
@@ -401,28 +410,29 @@ export default function Dashboard() {
   const evoMax = Math.max(1, ...evolution.flatMap(e => [e.in, e.out]));
   const goalColor = pct => pct < 80 ? 'var(--green)' : pct < 100 ? 'var(--amber)' : 'var(--red)';
   const noGoalCats = Object.keys(categories).filter(c =>
-    !goals.some(g => g.category === c) && !['Transferências', 'Renda', 'A revisar'].includes(c));
+    !goals.some(g => g.category === c) && !NON_BUDGET_CATEGORIES.includes(c));
 
   return (
     <div className="container">
       <header>
-        <div className="logo"><img src="/icon.svg" alt="" width={30} height={30} style={{ borderRadius: 9 }} />Fluxo</div>
+        <div className="logo"><img src="/icon.svg" alt="" width={30} height={30} style={{ borderRadius: 9 }} />{t('app.name')}</div>
         <div className="header-right">
-          <button className="hbtn desk-only" onClick={() => exportCsv(rows)} title="Exportar transações filtradas">⬇ CSV</button>
-          <button className="hbtn desk-only" onClick={() => setModal('rules')}>🧠 Regras{rules.length ? ` (${rules.length})` : ''}</button>
-          <button className="hbtn desk-only" onClick={() => setModal('batches')}>🗂 Importações</button>
-          <a className="hbtn desk-only" href="/cartoes" style={{ textDecoration: 'none' }}>💳 Faturas</a>
-          <a className="hbtn desk-only" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 Evoluir</a>
-          <a className="hbtn desk-only" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ Gerenciar</a>
+          <button className="hbtn desk-only" onClick={() => exportCsv(rows)} title={t('export.title')}>⬇ CSV</button>
+          <button className="hbtn desk-only" onClick={() => setModal('rules')}>🧠 {t('manage.tab.rules')}{rules.length ? ` (${rules.length})` : ''}</button>
+          <button className="hbtn desk-only" onClick={() => setModal('batches')}>🗂 {t('import.batches')}</button>
+          <a className="hbtn desk-only" href="/cartoes" style={{ textDecoration: 'none' }}>💳 {t('nav.cards')}</a>
+          <a className="hbtn desk-only" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 {t('nav.evolve')}</a>
+          <a className="hbtn desk-only" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ {t('nav.manage')}</a>
           <select className="control" value={month} onChange={e => { setMonth(e.target.value); setActiveCat(null); }}>
-            <option value="">Todo o período</option>
-            {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
+            <option value="">{t('filter.allPeriod')}</option>
+            {months.map(m => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}
           </select>
-          <button className="theme-toggle" title="Modo privacidade: esconder valores" onClick={() => {
+          <SeletorIdioma />
+          <button className="theme-toggle" title={t('common.privacyTitle')} onClick={() => {
             const on = document.documentElement.classList.toggle('privacy');
             try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}
           }}>👁</button>
-          <button className="theme-toggle" title="Alternar tema" onClick={() => {
+          <button className="theme-toggle" title={t('common.themeTitle')} onClick={() => {
             document.documentElement.classList.toggle('dark');
             try {
               localStorage.setItem('fluxo-theme',
@@ -436,15 +446,15 @@ export default function Dashboard() {
         <div>
           <span className="greeting-hello">{saudacao()},</span>{' '}
           <button className="greeting-name" onClick={editName}
-            title="Clique para editar seu nome">
-            {userName || 'defina seu nome'}
+            title={t('dash.editNameTitle')}>
+            {userName || t('dash.setName')}
           </button>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="hbtn" style={{ color: 'var(--red)' }} title="Atalho: tecla D"
-            onClick={() => setQuickAdd('despesa')}>− Despesa</button>
-          <button className="hbtn" style={{ color: 'var(--green)' }} title="Atalho: tecla R"
-            onClick={() => setQuickAdd('receita')}>+ Receita</button>
+          <button className="hbtn" style={{ color: 'var(--red)' }} title={t('dash.shortcutExpense')}
+            onClick={() => setQuickAdd('despesa')}>− {t('dash.expense')}</button>
+          <button className="hbtn" style={{ color: 'var(--green)' }} title={t('dash.shortcutIncome')}
+            onClick={() => setQuickAdd('receita')}>+ {t('dash.incomeEntry')}</button>
         </div>
       </div>
 
@@ -456,8 +466,8 @@ export default function Dashboard() {
         onDrop={e => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
       >
         <div className="dropzone-icon">⇪</div>
-        <h3>{busy ? 'Processando…' : 'Arraste seus extratos e faturas aqui'}</h3>
-        <p>PDF (Mercado Pago), OFX ou CSV — ou <b>clique para selecionar</b>. Reimportar o mesmo arquivo não duplica nada.</p>
+        <h3>{busy ? t('import.processing') : t('import.dropzone')}</h3>
+        <p>{t('import.hintPrefix')}<b>{t('import.hintClick')}</b>{t('import.hintSuffix')}</p>
         <input ref={fileRef} type="file" multiple accept=".pdf,.ofx,.csv,.txt"
           onChange={e => { upload(e.target.files); e.target.value = ''; }} />
         <div className="progress-bar" style={{ width: `${progress}%` }} />
@@ -465,26 +475,26 @@ export default function Dashboard() {
 
       <div className="cards">
         <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--green)' }} />Entradas</div>
-          <div className="card-value pos">{fmtBRL(summary.totIn)}</div>
-          <div className="card-sub">{summary.nIn} lançamentos</div>
+          <div className="card-label"><span className="dot" style={{ background: 'var(--green)' }} />{t('dash.income')}</div>
+          <div className="card-value pos">{fmtMoney(summary.totIn)}</div>
+          <div className="card-sub">{tn(summary.nIn, 'import.tx')}</div>
         </div>
         <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--red)' }} />Saídas</div>
-          <div className="card-value neg">{fmtBRL(summary.totOut)}</div>
-          <div className="card-sub">{summary.nOut} lançamentos</div>
+          <div className="card-label"><span className="dot" style={{ background: 'var(--red)' }} />{t('dash.expenses')}</div>
+          <div className="card-value neg">{fmtMoney(summary.totOut)}</div>
+          <div className="card-sub">{tn(summary.nOut, 'import.tx')}</div>
         </div>
         <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--accent)' }} />Saldo</div>
-          <div className={`card-value ${summary.bal >= 0 ? 'pos' : 'neg'}`}>{fmtBRL(summary.bal)}</div>
-          <div className="card-sub">entradas − saídas (sem transferências)</div>
+          <div className="card-label"><span className="dot" style={{ background: 'var(--accent)' }} />{t('dash.balance')}</div>
+          <div className={`card-value ${summary.bal >= 0 ? 'pos' : 'neg'}`}>{fmtMoney(summary.bal)}</div>
+          <div className="card-sub">{t('dash.balanceSub')}</div>
         </div>
         <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--amber)' }} />Projeção de gastos</div>
-          <div className="card-value">{summary.proj != null ? fmtBRL(summary.proj) : '—'}</div>
+          <div className="card-label"><span className="dot" style={{ background: 'var(--amber)' }} />{t('dash.projection')}</div>
+          <div className="card-value">{summary.proj != null ? fmtMoney(summary.proj) : '—'}</div>
           <div className="card-sub">
-            {summary.proj != null ? 'ritmo atual até o fim do mês' : 'disponível no mês corrente'}
-            {future.length > 0 && summary.proj != null ? ` · + parcelas contratadas` : ''}
+            {summary.proj != null ? t('dash.projSub') : t('dash.projNA')}
+            {future.length > 0 && summary.proj != null ? ` · ${t('dash.projInstallments')}` : ''}
           </div>
         </div>
       </div>
@@ -493,7 +503,7 @@ export default function Dashboard() {
         <div className="insights-row">
           {insights.map(i => (
             <div key={i.id} className={`insight-card sev-${i.severity}`}>
-              <button className="insight-x" title="Não mostrar de novo neste mês"
+              <button className="insight-x" title={t('insight.dismiss')}
                 onClick={() => dismissInsight(i.id)}>✕</button>
               <div className="insight-title">{i.title}</div>
               <div className="insight-detail">{i.detail}</div>
@@ -514,9 +524,9 @@ export default function Dashboard() {
       <div className="grid">
         <div className="left-col">
           <div className="panel">
-            <div className="panel-head"><h2>Gastos por categoria</h2></div>
+            <div className="panel-head"><h2>{t('dash.byCategory')}</h2></div>
             {donut.entries.length === 0 ? (
-              <div className="empty">Sem gastos no período.</div>
+              <div className="empty">{t('dash.noSpending')}</div>
             ) : (
               <>
                 <div className="donut-wrap">
@@ -534,8 +544,8 @@ export default function Dashboard() {
                   </svg>
                   <div className="donut-center">
                     <div>
-                      <div className="t">{fmtBRL(activeCat ? (donut.entries.find(([c]) => c === activeCat)?.[1] || 0) : donut.total)}</div>
-                      <div className="s">{activeCat || 'total gasto'}</div>
+                      <div className="t">{fmtMoney(activeCat ? (donut.entries.find(([c]) => c === activeCat)?.[1] || 0) : donut.total)}</div>
+                      <div className="s">{activeCat ? labelOf(activeCat) : t('dash.totalSpent')}</div>
                     </div>
                   </div>
                 </div>
@@ -545,8 +555,8 @@ export default function Dashboard() {
                       style={{ opacity: activeCat && activeCat !== cat ? .4 : 1 }}
                       onClick={() => setActiveCat(a => a === cat ? null : cat)}>
                       <span className="dot" style={{ background: categories[cat] }} />
-                      <span className="name">{emojis[cat] ? `${emojis[cat]} ` : ''}{cat}</span>
-                      <span className="val">{fmtBRL(val)}</span>
+                      <span className="name">{emojis[cat] ? `${emojis[cat]} ` : ''}{labelOf(cat)}</span>
+                      <span className="val">{fmtMoney(val)}</span>
                       <span className="pct">{(val / donut.total * 100).toFixed(0)}%</span>
                     </button>
                   ))}
@@ -557,9 +567,9 @@ export default function Dashboard() {
 
           <div className="panel">
             <div className="panel-head">
-              <h2>Orçamento · {monthLabel(effMonth || '2026-01').split(' de ')[0]}</h2>
+              <h2>{t('dash.budget')}{effMonth ? ` · ${fmtMonthLong(effMonth)}` : ''}</h2>
               <a className="hbtn" style={{ height: 26, fontSize: 11.5, textDecoration: 'none' }}
-                href={`/relatorio?mes=${effMonth}`}>📄 Relatório</a>
+                href={`/relatorio?mes=${effMonth}`}>📄 {t('report.title')}</a>
             </div>
             <div className="panel-body">
               {dailyAllowance && (
@@ -568,17 +578,17 @@ export default function Dashboard() {
                   marginBottom: 12, fontSize: 13,
                 }}>
                   {dailyAllowance.remaining >= 0 ? (
-                    <>Você pode gastar <b style={{ color: 'var(--green)' }}>{fmtBRL(Math.floor(dailyAllowance.perDay))}/dia</b>
-                    <span style={{ color: 'var(--muted)' }}> · {fmtBRL(dailyAllowance.remaining)} restantes ÷ {dailyAllowance.daysLeft} dias</span></>
+                    <>{t('dash.allowancePrefix')} <b style={{ color: 'var(--green)' }}>{t('dash.allowancePerDay', { v: fmtMoney(Math.floor(dailyAllowance.perDay)) })}</b>
+                    <span style={{ color: 'var(--muted)' }}> · {t('dash.allowanceRest', { v: fmtMoney(dailyAllowance.remaining), n: dailyAllowance.daysLeft })}</span></>
                   ) : (
-                    <>Orçamento estourado em <b style={{ color: 'var(--red)' }}>{fmtBRL(-dailyAllowance.remaining)}</b>
-                    <span style={{ color: 'var(--muted)' }}> — todo gasto extra sai do mês que vem</span></>
+                    <>{t('dash.overrunPrefix')} <b style={{ color: 'var(--red)' }}>{fmtMoney(-dailyAllowance.remaining)}</b>
+                    <span style={{ color: 'var(--muted)' }}> — {t('dash.overrunNote')}</span></>
                   )}
                 </div>
               )}
               {goals.length === 0 && (
                 <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 4 }}>
-                  Defina limites de gasto por categoria e acompanhe o progresso do mês.
+                  {t('dash.goalsHelp')}
                 </div>
               )}
               {goals.map(g => {
@@ -592,18 +602,20 @@ export default function Dashboard() {
                     <div className="goal-row">
                       <span className="name">
                         <span className="dot" style={{ background: categories[g.category] }} />
-                        {emojis[g.category] ? `${emojis[g.category]} ` : ''}{g.category}
+                        {emojis[g.category] ? `${emojis[g.category]} ` : ''}{labelOf(g.category)}
                         <button className="goal-del"
                           title={g.rollover
-                            ? `Rollover ativo: sobra/estouro do mês anterior ajusta o orçamento${carry ? ` (${carry > 0 ? '+' : ''}${fmtBRL(carry)} este mês)` : ''}`
-                            : 'Ativar rollover: sobra/estouro do mês anterior ajusta o orçamento'}
+                            ? `${t('dash.rolloverOn')}${carry ? ` ${t('dash.rolloverCarry', { sign: carry > 0 ? '+' : '', v: fmtMoney(carry) })}` : ''}`
+                            : t('dash.rolloverOff')}
                           style={{ color: g.rollover ? 'var(--accent)' : 'var(--muted)', opacity: g.rollover ? 1 : .5 }}
                           onClick={() => saveGoal(g.category, (g.limit_cents / 100).toFixed(2).replace('.', ','), !g.rollover)}>↻</button>
                       </span>
-                      <span className="nums" title={carry ? `meta ${fmtBRL(g.limit_cents)} ${carry > 0 ? '+' : '−'} ${fmtBRL(Math.abs(carry))} do mês anterior` : undefined}>
-                        {fmtBRL(spent)} / {fmtBRL(budget)} ({realPct.toFixed(0)}%)
+                      <span className="nums" title={carry
+                        ? t('dash.goalCarryTitle', { goal: fmtMoney(g.limit_cents), sign: carry > 0 ? '+' : '−', carry: fmtMoney(Math.abs(carry)) })
+                        : undefined}>
+                        {fmtMoney(spent)} / {fmtMoney(budget)} ({realPct.toFixed(0)}%)
                       </span>
-                      <button className="goal-del" title="Remover meta"
+                      <button className="goal-del" title={t('dash.removeGoal')}
                         onClick={() => saveGoal(g.category, '0')}>✕</button>
                     </div>
                     <div className="goal-bar">
@@ -614,10 +626,10 @@ export default function Dashboard() {
               })}
               <div className="goal-form">
                 <select className="control" value={goalCat} onChange={e => setGoalCat(e.target.value)}>
-                  <option value="">Categoria…</option>
-                  {noGoalCats.map(c => <option key={c}>{c}</option>)}
+                  <option value="">{t('common.categoryPick')}</option>
+                  {noGoalCats.map(c => <option key={c} value={c}>{labelOf(c)}</option>)}
                 </select>
-                <input placeholder="R$ 500,00" value={goalVal}
+                <input placeholder={t('dash.goalPlaceholder', { symbol: currencySymbol() })} value={goalVal}
                   onChange={e => setGoalVal(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && saveGoal(goalCat, goalVal)} />
                 <button onClick={() => saveGoal(goalCat, goalVal)}>+</button>
@@ -628,8 +640,8 @@ export default function Dashboard() {
           {upcomingBills.length > 0 && (
             <div className="panel">
               <div className="panel-head">
-                <h2>Próximos vencimentos</h2>
-                <a href="/gerenciar?tab=apagar" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>gerenciar</a>
+                <h2>{t('dash.upcoming')}</h2>
+                <a href="/gerenciar?tab=apagar" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>{t('dash.manageLink')}</a>
               </div>
               <div className="panel-body">
                 {upcomingBills.map(o => (
@@ -637,12 +649,12 @@ export default function Dashboard() {
                     <span>
                       {emojis[o.category] ? `${emojis[o.category]} ` : ''}{o.description}
                       <span style={{ color: o.status === 'atrasada' ? 'var(--red)' : 'var(--muted)', fontSize: 11.5, marginLeft: 6 }}>
-                        {o.status === 'atrasada' ? 'atrasada · ' : ''}venc {o.due_date.slice(8, 10)}/{o.due_date.slice(5, 7)}
+                        {o.status === 'atrasada' ? `${t('bills.lateShort')} · ` : ''}{t('bills.dueShort', { d: fmtDayMonth(o.due_date) })}
                       </span>
                     </span>
                     <span className="v">
-                      {fmtBRL(o.amount_cents)}
-                      <button className="goal-del" title="Marcar como paga" style={{ marginLeft: 6, color: 'var(--green)' }}
+                      {fmtMoney(o.amount_cents)}
+                      <button className="goal-del" title={t('bills.markPaid')} style={{ marginLeft: 6, color: 'var(--green)' }}
                         onClick={() => payBill(o)}>✓</button>
                     </span>
                   </div>
@@ -653,24 +665,24 @@ export default function Dashboard() {
 
           {evolution.length > 1 && (
             <div className="panel">
-              <div className="panel-head"><h2>Evolução mensal</h2></div>
+              <div className="panel-head"><h2>{t('dash.evolution')}</h2></div>
               <div className="panel-body">
                 <svg width="100%" height="110" viewBox={`0 0 ${evolution.length * 52} 110`} preserveAspectRatio="none">
                   {evolution.map((e, i) => (
                     <g key={e.ym}>
                       <rect x={i * 52 + 8} y={100 - e.in / evoMax * 92} width="16" rx="3"
                         height={Math.max(e.in / evoMax * 92, 2)} fill="var(--green)" opacity=".85">
-                        <title>{monthShort(e.ym)}: entradas {fmtBRL(e.in)}</title>
+                        <title>{t('dash.evoIn', { m: fmtMonthShort(e.ym), v: fmtMoney(e.in) })}</title>
                       </rect>
                       <rect x={i * 52 + 28} y={100 - e.out / evoMax * 92} width="16" rx="3"
                         height={Math.max(e.out / evoMax * 92, 2)} fill="var(--red)" opacity=".85">
-                        <title>{monthShort(e.ym)}: saídas {fmtBRL(e.out)}</title>
+                        <title>{t('dash.evoOut', { m: fmtMonthShort(e.ym), v: fmtMoney(e.out) })}</title>
                       </rect>
                     </g>
                   ))}
                 </svg>
                 <div className="evo-labels">
-                  {evolution.map(e => <span key={e.ym}>{monthShort(e.ym)}</span>)}
+                  {evolution.map(e => <span key={e.ym}>{fmtMonthShort(e.ym)}</span>)}
                 </div>
               </div>
             </div>
@@ -678,16 +690,16 @@ export default function Dashboard() {
 
           {future.length > 0 && (
             <div className="panel">
-              <div className="panel-head"><h2>Parcelas já contratadas</h2></div>
+              <div className="panel-head"><h2>{t('dash.future')}</h2></div>
               <div className="panel-body">
                 {future.map(([ym, f]) => (
                   <div className="future-row" key={ym}>
-                    <span>{monthLabel(ym)}</span>
-                    <span className="v">{fmtBRL(f.cents)} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({f.n}x)</span></span>
+                    <span>{fmtMonthLong(ym)}</span>
+                    <span className="v">{fmtMoney(f.cents)} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({f.n}x)</span></span>
                   </div>
                 ))}
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 8 }}>
-                  Estimado a partir das parcelas visíveis nas faturas importadas.
+                  {t('dash.futureNote')}
                 </div>
               </div>
             </div>
@@ -696,60 +708,60 @@ export default function Dashboard() {
 
         <div className="panel">
           <div className="panel-head" style={{ paddingBottom: 14 }}>
-            <h2>Transações <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 13 }}>· {rows.length}</span></h2>
+            <h2>{t('dash.transactions')} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 13 }}>· {rows.length}</span></h2>
             {reviewCount > 0 && (
               <button style={{ border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--amber)', borderRadius: 10, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
-                title="Revisar em massa, agrupado por estabelecimento"
+                title={t('review.buttonTitle')}
                 onClick={() => setShowReview(true)}>
-                ⚠ {reviewCount} a revisar
+                ⚠ {t('dash.toReviewBtn', { n: reviewCount })}
               </button>
             )}
           </div>
           <div className="filters">
-            <div className="search">🔍<input placeholder="Buscar por descrição…" value={search} onChange={e => setSearch(e.target.value)} /></div>
+            <div className="search">🔍<input placeholder={t('filter.searchDesc')} value={search} onChange={e => setSearch(e.target.value)} /></div>
             <select className="control" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-              <option value="">Todas as categorias</option>
-              {Object.keys(categories).map(c => <option key={c}>{c}</option>)}
+              <option value="">{t('filter.allCategories')}</option>
+              {Object.keys(categories).map(c => <option key={c} value={c}>{labelOf(c)}</option>)}
             </select>
             <select className="control" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-              <option value="">Todos os tipos</option>
-              <option value="out">Só saídas</option>
-              <option value="in">Só entradas</option>
-              <option value="trf">Transferências</option>
-              <option value="review">A revisar</option>
+              <option value="">{t('filter.allTypes')}</option>
+              <option value="out">{t('filter.onlyOut')}</option>
+              <option value="in">{t('filter.onlyIn')}</option>
+              <option value="trf">{t('cat.transfers')}</option>
+              <option value="review">{t('cat.to_review')}</option>
             </select>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table>
-              <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th style={{ textAlign: 'right' }}>Valor</th></tr></thead>
+              <thead><tr><th>{t('common.date')}</th><th>{t('common.description')}</th><th>{t('common.category')}</th><th style={{ textAlign: 'right' }}>{t('common.value')}</th></tr></thead>
               <tbody>
-                {rows.slice(0, limit).map(t => {
-                  const color = categories[t.category] || '#999';
-                  const recKey = stripParcela(t.description).toLowerCase();
-                  const isRec = t.amount_cents < 0 && !t.transfer && recurring.has(recKey);
+                {rows.slice(0, limit).map(tx => {
+                  const color = categories[tx.category] || '#999';
+                  const recKey = stripParcela(tx.description).toLowerCase();
+                  const isRec = tx.amount_cents < 0 && !tx.transfer && recurring.has(recKey);
                   const recWarn = isRec ? recurring.get(recKey) : null;
                   return (
-                    <tr key={t.id}>
-                      <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDate(t.date)}</td>
+                    <tr key={tx.id}>
+                      <td style={{ color: 'var(--muted)', whiteSpace: 'nowrap' }}>{fmtDayMonth(tx.date)}</td>
                       <td className="desc">
-                        {t.description}
-                        {isRec && <span className="rec-badge" title={recWarn || 'Despesa recorrente'}>{recWarn ? '↻⚠️' : '↻'}</span>}
-                        <small>{t.source}</small>
+                        {tx.description}
+                        {isRec && <span className="rec-badge" title={recWarn || t('dash.recurring')}>{recWarn ? '↻⚠️' : '↻'}</span>}
+                        <small>{tx.source}</small>
                       </td>
                       <td>
-                        <select className="badge-select" value={t.category}
+                        <select className="badge-select" value={tx.category}
                           style={{
                             background: `${color}22`, color,
-                            outline: t.category === 'A revisar' ? `1.5px dashed ${color}88` : 'none',
+                            outline: tx.category === CAT.TO_REVIEW ? `1.5px dashed ${color}88` : 'none',
                           }}
-                          onChange={e => changeCategory(t, e.target.value)}>
+                          onChange={e => changeCategory(tx, e.target.value)}>
                           {Object.keys(categories).map(c => (
-                            <option key={c} value={c}>{emojis[c] ? `${emojis[c]} ` : ''}{c}</option>
+                            <option key={c} value={c}>{emojis[c] ? `${emojis[c]} ` : ''}{labelOf(c)}</option>
                           ))}
                         </select>
                       </td>
-                      <td className={`amount ${t.transfer ? 'trf' : t.amount_cents > 0 ? 'in' : 'out'}`}>
-                        {t.amount_cents > 0 ? '+' : ''}{fmtBRL(t.amount_cents)}
+                      <td className={`amount ${tx.transfer ? 'trf' : tx.amount_cents > 0 ? 'in' : 'out'}`}>
+                        {tx.amount_cents > 0 ? '+' : ''}{fmtMoney(tx.amount_cents)}
                       </td>
                     </tr>
                   );
@@ -757,11 +769,11 @@ export default function Dashboard() {
               </tbody>
             </table>
             {rows.length === 0 && <div className="empty">
-              {txs.length === 0 ? 'Nada por aqui ainda. Arraste um extrato acima para começar.' : 'Nenhuma transação encontrada.'}
+              {txs.length === 0 ? t('dash.emptyFirst') : t('common.noTx')}
             </div>}
             {rows.length > limit && (
               <div className="pager">
-                <button onClick={() => setLimit(l => l + 100)}>Mostrar mais ({rows.length - limit} restantes)</button>
+                <button onClick={() => setLimit(l => l + 100)}>{t('common.showMore', { n: rows.length - limit })}</button>
               </div>
             )}
           </div>
@@ -773,37 +785,35 @@ export default function Dashboard() {
           <div className="modal">
             <div className="modal-head">
               <div>
-                <h3>{modal === 'rules' ? 'Regras de categorização' : 'Importações'}</h3>
-                <p>{modal === 'rules'
-                  ? 'Criadas quando você corrige uma transação. Excluir uma regra não altera o que já foi categorizado.'
-                  : 'Cada arquivo importado. Desfazer remove apenas as transações daquele lote.'}</p>
+                <h3>{modal === 'rules' ? t('manage.rulesTitle') : t('import.batches')}</h3>
+                <p>{modal === 'rules' ? t('manage.rulesHelp') : t('import.batchesHelp')}</p>
               </div>
               <button className="modal-close" onClick={() => setModal(null)}>✕</button>
             </div>
             <div className="modal-body">
               {modal === 'rules' && (rules.length === 0
-                ? <div className="empty">Nenhuma regra ainda. Corrija uma transação "A revisar" para criar a primeira.</div>
+                ? <div className="empty">{t('manage.rulesEmpty', { cat: t('cat.to_review') })}</div>
                 : rules.map(r => (
                   <div className="list-row" key={r.id}>
                     <div className="grow">
                       <div style={{ fontWeight: 500 }}>"{r.pattern}"</div>
-                      <div className="sub">contém no texto → categoria ao lado</div>
+                      <div className="sub">{t('manage.ruleSub')}</div>
                     </div>
                     <select className="control" value={r.category} onChange={e => editRule(r, e.target.value)}>
-                      {Object.keys(categories).map(c => <option key={c}>{c}</option>)}
+                      {Object.keys(categories).map(c => <option key={c} value={c}>{labelOf(c)}</option>)}
                     </select>
-                    <button className="danger-btn" onClick={() => deleteRule(r)}>Excluir</button>
+                    <button className="danger-btn" onClick={() => deleteRule(r)}>{t('common.delete')}</button>
                   </div>
                 )))}
               {modal === 'batches' && (batches.length === 0
-                ? <div className="empty">Nenhuma importação ainda.</div>
+                ? <div className="empty">{t('import.batchesEmpty')}</div>
                 : batches.map(b => (
                   <div className="list-row" key={b.id}>
                     <div className="grow">
                       <div style={{ fontWeight: 500 }}>{b.file_name}</div>
-                      <div className="sub">{b.kind} · {b.inserted} novas, {b.skipped} puladas · {b.imported_at}</div>
+                      <div className="sub">{t('import.batchSub', { kind: b.kind, inserted: b.inserted, skipped: b.skipped, at: b.imported_at })}</div>
                     </div>
-                    <button className="danger-btn" onClick={() => undoBatch(b)}>↩ Desfazer</button>
+                    <button className="danger-btn" onClick={() => undoBatch(b)}>↩ {t('common.undo')}</button>
                   </div>
                 )))}
             </div>
@@ -812,7 +822,7 @@ export default function Dashboard() {
       )}
 
       {quickAdd && (
-        <LancamentoRapido tipo={quickAdd} categories={categories} emojis={emojis}
+        <LancamentoRapido tipo={quickAdd} categories={categories} emojis={emojis} label={labelOf}
           onClose={() => setQuickAdd(null)}
           onDone={async r => {
             if (r.error) { toast(r.error, '⚠️', true); return; }
@@ -823,7 +833,7 @@ export default function Dashboard() {
       )}
 
       {showReview && (
-        <RevisaoMassa txs={txs} categories={categories}
+        <RevisaoMassa txs={txs} categories={categories} label={labelOf}
           onClose={() => setShowReview(false)}
           onDone={async r => {
             if (r.error) toast(r.error, '⚠️', true);
@@ -833,9 +843,9 @@ export default function Dashboard() {
       )}
 
       <div className="toasts">
-        {toasts.map(t => (
-          <div key={t.id} className={`toast ${t.err ? 'err' : ''}`}>
-            <span className="ico">{t.ico}</span><span>{t.msg}</span>
+        {toasts.map(to => (
+          <div key={to.id} className={`toast ${to.err ? 'err' : ''}`}>
+            <span className="ico">{to.ico}</span><span>{to.msg}</span>
           </div>
         ))}
       </div>

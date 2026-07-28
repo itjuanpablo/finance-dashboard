@@ -2,15 +2,36 @@ import './globals.css';
 import { Inter } from 'next/font/google';
 import PinGate from '@/components/PinGate';
 import BottomNav from '@/components/BottomNav';
+import { t } from '@/lib/i18n';
+import { LOCALES } from '@/lib/config';
+import { getDb, localeSettings } from '@/lib/db';
 
 // Fonte oficial do app, embutida no build (sem requisições externas em runtime).
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
-export const metadata = {
-  title: 'Fluxo — Finanças Pessoais',
-  description: 'Controle de gastos local, automatizado e minimalista',
-  appleWebApp: { capable: true, title: 'Fluxo', statusBarStyle: 'black-translucent' },
-};
+// O idioma vem do banco e pode mudar a qualquer momento pelo seletor, então
+// nada aqui pode ser pré-renderizado com o idioma congelado no build.
+export const dynamic = 'force-dynamic';
+
+/**
+ * Lê a preferência e a publica para o código de servidor desta requisição.
+ * `getDb()` já chama publishLocale ao abrir o banco; repetir aqui garante que o
+ * layout — a raiz da árvore — resolva o idioma antes de qualquer página.
+ */
+function currentSettings() {
+  return localeSettings(getDb());
+}
+
+// generateMetadata, e não `export const metadata`: constante é avaliada uma vez
+// na carga do módulo e ficaria presa no idioma daquele instante.
+export async function generateMetadata() {
+  currentSettings();
+  return {
+    title: t('app.title'),
+    description: t('app.description'),
+    appleWebApp: { capable: true, title: t('app.name'), statusBarStyle: 'black-translucent' },
+  };
+}
 
 export const viewport = {
   themeColor: '#4f46e5',
@@ -30,10 +51,22 @@ try {
 `;
 
 export default function RootLayout({ children }) {
+  const { locale, currency } = currentSettings();
+
+  // Este <script> é o que faz a troca de idioma funcionar sem mismatch de
+  // hidratação: ele roda durante o parse do HTML, ANTES do React hidratar, e é
+  // de onde lib/config.js lê no navegador. Servidor e cliente passam a decidir
+  // o idioma pelo mesmo valor — se o cliente adivinhasse sozinho, o React
+  // reidrataria com texto diferente do que veio no HTML.
+  const localeInit =
+    `window.__FLUXO_LOCALE__=${JSON.stringify(locale)};` +
+    `window.__FLUXO_CURRENCY__=${JSON.stringify(currency)};`;
+
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    // lang muda hifenização, leitor de tela e o Intl do navegador
+    <html lang={LOCALES[locale]?.htmlLang || locale} suppressHydrationWarning>
       <body className={inter.className}>
-        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        <script dangerouslySetInnerHTML={{ __html: localeInit + themeInit }} />
         <PinGate>
           {children}
           <BottomNav />

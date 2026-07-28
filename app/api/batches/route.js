@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -15,7 +16,7 @@ export async function GET() {
 // DELETE: desfaz uma importação — remove as transações daquele lote.
 export async function DELETE(request) {
   const { id } = await request.json();
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: t('api.idRequired') }, { status: 400 });
   const db = getDb();
   db.exec('BEGIN');
   try {

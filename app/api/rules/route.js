@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb, isValidCategory } from '@/lib/db';
+import { CAT } from '@/lib/categories';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// Contrato v4: rules.category guarda a CHAVE da categoria.
 
 export async function GET() {
   const db = getDb();
@@ -13,12 +17,12 @@ export async function GET() {
 }
 
 // POST: cria ou edita uma regra (upsert por padrão de texto).
-// apply: true também recategoriza retroativamente tudo que está em "A revisar".
+// apply: true também recategoriza retroativamente tudo que está em CAT.TO_REVIEW.
 export async function POST(request) {
   const { pattern, category, apply } = await request.json();
   const db = getDb();
   if (!pattern || pattern.trim().length < 3 || !isValidCategory(db, category)) {
-    return NextResponse.json({ error: 'Parâmetros inválidos' }, { status: 400 });
+    return NextResponse.json({ error: t('api.invalidParams') }, { status: 400 });
   }
   const p = pattern.trim();
   db.prepare(
@@ -27,8 +31,8 @@ export async function POST(request) {
   let applied = 0;
   if (apply) {
     applied = db.prepare(
-      "UPDATE transactions SET category = ? WHERE category = 'A revisar' AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE"
-    ).run(category, `%${p}%`).changes;
+      'UPDATE transactions SET category = ? WHERE category = ? AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE'
+    ).run(category, CAT.TO_REVIEW, `%${p}%`).changes;
   }
   return NextResponse.json({ ok: true, applied });
 }
@@ -36,7 +40,7 @@ export async function POST(request) {
 // DELETE: remove uma regra. Transações já categorizadas não são alteradas.
 export async function DELETE(request) {
   const { id } = await request.json();
-  if (!id) return NextResponse.json({ error: 'id obrigatório' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: t('api.idRequired') }, { status: 400 });
   const db = getDb();
   db.prepare('DELETE FROM rules WHERE id = ?').run(id);
   return NextResponse.json({ ok: true });

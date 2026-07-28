@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { t } from '@/lib/i18n';
 import { getDb, isValidCategory } from '@/lib/db';
 import { computeBills } from '@/lib/bills';
 
@@ -10,12 +11,13 @@ export async function GET() {
   return NextResponse.json(computeBills(db));
 }
 
+// `b.category` é CHAVE (bills.category), validada contra categories.key.
 function validate(db, b) {
-  if (!b.description?.trim()) return 'Descrição obrigatória';
-  if (!Number.isFinite(b.amount_cents) || Math.round(b.amount_cents) <= 0) return 'Valor inválido';
-  if (!isValidCategory(db, b.category)) return 'Categoria inválida';
+  if (!b.description?.trim()) return t('api.descRequired');
+  if (!Number.isFinite(b.amount_cents) || Math.round(b.amount_cents) <= 0) return t('api.invalidAmount');
+  if (!isValidCategory(db, b.category)) return t('api.invalidCategory');
   if (!(b.due_day >= 1 && b.due_day <= 28)) return 'Dia de vencimento entre 1 e 28';
-  if (!['mensal', 'anual'].includes(b.frequency)) return 'Frequência inválida';
+  if (!['mensal', 'anual'].includes(b.frequency)) return t('api.invalidFrequency');
   if (b.frequency === 'anual' && !(b.due_month >= 1 && b.due_month <= 12)) return 'Mês de vencimento inválido';
   return null;
 }
@@ -38,7 +40,7 @@ export async function PATCH(request) {
   const b = await request.json();
   const db = getDb();
   const cur = db.prepare('SELECT * FROM bills WHERE id = ?').get(b.id);
-  if (!cur) return NextResponse.json({ error: 'Conta não encontrada' }, { status: 404 });
+  if (!cur) return NextResponse.json({ error: t('api.accountNotFound') }, { status: 404 });
   const merged = { ...cur, ...b };
   if (b.archived === undefined) {
     const err = validate(db, merged);
