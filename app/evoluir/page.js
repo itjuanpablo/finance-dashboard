@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { IDEIAS } from '@/lib/ideias-renda';
+import { getIdeias } from '@/lib/ideias-renda';
 import { t } from '@/lib/i18n';
 import SeletorIdioma from '@/components/SeletorIdioma';
 import { fmtMoney, parseAmountToCents } from '@/lib/format';
@@ -49,7 +49,8 @@ export default function Evoluir() {
   }, [inicial, aporte, taxaNum]);
 
   const maxFv = rows ? Math.max(...rows.map(r => r.fv)) : 1;
-  const ideias = IDEIAS.filter(i => filtro === 'todas' || i.categoria === filtro);
+  // getIdeias() no render, não constante de módulo: o idioma muda em runtime
+  const ideias = getIdeias().filter(i => filtro === 'todas' || i.categoria === filtro);
 
   return (
     <div className="container">

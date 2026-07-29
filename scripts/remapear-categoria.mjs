@@ -90,9 +90,11 @@ if (!aplicar) {
   process.exit(0);
 }
 
+// backupDb devolve { path, error } desde a correção do backup silencioso:
+// agora dá para dizer POR QUE falhou, em vez de só "falhou".
 const copia = backupDb(db, 'pre-remap');
-console.log(`\n  backup: ${copia || '(falhou — abortando)'}`);
-if (!copia) process.exit(1);
+console.log(`\n  backup: ${copia.path || `(falhou: ${copia.error} — abortando)`}`);
+if (!copia.path) process.exit(1);
 
 db.exec('BEGIN');
 try {

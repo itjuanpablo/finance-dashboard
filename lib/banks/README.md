@@ -55,6 +55,7 @@ de coluna é por sinônimo de cabeçalho, nunca por índice fixo.
 | Itaú | BR | CSV | média (layout) / baixa (detecção) | sem cabeçalho: depende do nome do arquivo |
 | Inter | BR | CSV | baixa | cabeçalho genérico, exige marcador |
 | Mercado Pago extracto | AR | PDF | **alta** | validado: entradas, saídas e cadeia de saldos fecham ao centavo |
+| Conta ("Últimos movimientos") | AR | PDF | **alta** | validado; cadeia de saldos conferida elo por elo. **Banco não identificado**: o PDF não traz o nome no texto, só no logotipo (imagem) — o perfil casa pelo LAYOUT |
 | Mercado Pago resumen (tarjeta) | AR | PDF | baixa | **não validado**; confere totais e falha ruidoso |
 | Galicia, Santander AR, BBVA AR, Brubank, Ualá, Naranja X | AR | CSV | baixa | inferido, exige marcador |
 

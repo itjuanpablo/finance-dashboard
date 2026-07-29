@@ -30,8 +30,13 @@ export async function POST(request) {
   ).run(p, category);
   let applied = 0;
   if (apply) {
+    // A regra também liga/desliga a bandeira de transferência interna: é assim
+    // que o usuário ensina "TPUSH <meu nome> é dinheiro meu trocando de conta,
+    // não receita" e o app passa a acertar o total do mês — inclusive nas
+    // próximas importações (ver lib/importer.js).
     applied = db.prepare(
-      'UPDATE transactions SET category = ? WHERE category = ? AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE'
+      `UPDATE transactions SET category = ?, transfer = ${category === CAT.TRANSFERS ? 1 : 0}
+       WHERE category = ? AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE`
     ).run(category, CAT.TO_REVIEW, `%${p}%`).changes;
   }
   return NextResponse.json({ ok: true, applied });

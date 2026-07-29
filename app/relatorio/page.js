@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { t, makeCatLabeler } from '@/lib/i18n';
+import { localIsoMonth } from '@/lib/insights';
 import { fmtMoney, fmtDayMonth, fmtMonthLong, fmtToday } from '@/lib/format';
 
 const addMonths = (ym, k) => {
@@ -37,7 +38,9 @@ export default function Relatorio() {
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('mes');
-    setMes(/^\d{4}-\d{2}$/.test(p || '') ? p : new Date().toISOString().slice(0, 7));
+    // localIsoMonth, não toISOString: em UTC−3, abrir o relatório em 31/12 às
+    // 21h caía em janeiro — mês sem lançamento nenhum, relatório em branco.
+    setMes(/^\d{4}-\d{2}$/.test(p || '') ? p : localIsoMonth());
     Promise.all([fetch('/api/transactions'), fetch('/api/goals'), fetch('/api/categories')])
       .then(async ([tRes, g, c]) => {
         const td = await tRes.json();

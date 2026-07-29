@@ -1,13 +1,14 @@
 {
   "name": "fluxo",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "private": true,
   "license": "MIT",
   "author": "Juan Pablo Ladeira (https://github.com/itjuanpablo)",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "build": "next build",
-    "start": "next start"
+    "start": "next start -H 127.0.0.1"
   },
   "engines": {
     "node": ">=22.13"

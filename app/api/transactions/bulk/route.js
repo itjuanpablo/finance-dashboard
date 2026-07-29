@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
+import { CAT } from '@/lib/categories';
 import { getDb, isValidCategory } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -25,7 +26,9 @@ export async function POST(request) {
     if (!isValidCategory(db, value)) {
       return NextResponse.json({ error: t('api.invalidCategory') }, { status: 400 });
     }
-    sql = `UPDATE transactions SET category = ? WHERE id IN (${ph})`;
+    // Categoria "Transferências" implica a bandeira (ver PATCH em ../route.js):
+    // sem isto o gráfico mudava e o total do mês não, dois números discordando.
+    sql = `UPDATE transactions SET category = ?, transfer = ${value === CAT.TRANSFERS ? 1 : 0} WHERE id IN (${ph})`;
     args.push(value);
   } else if (action === 'delete') {
     sql = `UPDATE transactions SET deleted_at = datetime('now') WHERE id IN (${ph})`;

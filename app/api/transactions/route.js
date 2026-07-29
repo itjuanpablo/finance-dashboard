@@ -13,8 +13,16 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const db = getDb();
+  // `invoice_ref` e `batch_id` viajam para a tela porque o dashboard precisa
+  // deles para não mentir:
+  //  · invoice_ref é a competência da fatura em que a parcela FOI cobrada. Sem
+  //    ela, a projeção de parcelas futuras só tem `date` (data da COMPRA,
+  //    repetida em todas as parcelas) e erra o mês — ver o cálculo em app/page.js.
+  //  · batch_id permite contar, ANTES de confirmar o desfazer, quantas linhas do
+  //    lote têm edição manual — que o DELETE físico leva embora para sempre.
   const transactions = db.prepare(`
     SELECT id, date, description, amount_cents, category, transfer, source, account_id,
+           invoice_ref, batch_id,
            original_date, original_description, original_amount_cents
     FROM transactions WHERE deleted_at IS NULL
     ORDER BY date DESC, id DESC
@@ -82,6 +90,24 @@ export async function PATCH(request) {
     }
     sets.push('category = @category');
     args.category = body.category;
+
+    // Categoria "Transferências" IMPLICA a bandeira de transferência interna.
+    //
+    // Sem isto não havia forma nenhuma de ensinar ao app que um lançamento é
+    // dinheiro trocando de bolso: `transfer` só era escrito pelos parsers, e a
+    // tela apenas lia. Quando o parser não reconhece (ex.: transferência
+    // recebida da própria conta em outro banco, que o extrato não distingue de
+    // uma receita), o total de entradas do mês fica inflado e o usuário não
+    // tinha o que fazer — trocar a categoria mudava o gráfico e não mudava o
+    // total, o que é pior: dois números discordando na mesma tela.
+    //
+    // O caminho inverso também: tirar de "Transferências" para uma categoria
+    // real significa "isto é despesa/receita de verdade", então a bandeira cai.
+    // `body.transfer` explícito continua tendo a última palavra (abaixo).
+    if (body.transfer === undefined) {
+      sets.push('transfer = @transferFromCat');
+      args.transferFromCat = body.category === CAT.TRANSFERS ? 1 : 0;
+    }
   }
   if (body.transfer !== undefined) {
     sets.push('transfer = @transfer');

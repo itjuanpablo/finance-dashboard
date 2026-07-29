@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { computeInsights } from '@/lib/insights';
+import { computeInsights, localIsoDate, localIsoMonth } from '@/lib/insights';
 import RevisaoMassa from '@/components/RevisaoMassa';
 import SeletorIdioma from '@/components/SeletorIdioma';
 import LancamentoRapido from '@/components/LancamentoRapido';
@@ -69,7 +69,14 @@ export default function Dashboard() {
       fetch('/api/rules'), fetch('/api/batches'), fetch('/api/cards'),
       fetch('/api/bills'), fetch('/api/categories'),
     ]);
-    setBillOccurrences((await biRes.json()).occurrences || []);
+    const bills = await biRes.json();
+    setBillOccurrences(bills.occurrences || []);
+    // conciliação de contas a pagar que não conseguiu gravar: a tela mostra o
+    // status certo, mas na próxima abertura ele volta a aparecer como não pago —
+    // melhor dizer do que deixar a pessoa achando que o app está esquecendo
+    if (bills.reconcileError) {
+      toast(t('bills.reconcileFailed', { msg: bills.reconcileError }), '⚠️', true);
+    }
     const tx = await tRes.json();
     setTxs(tx.transactions);
     setCategories(tx.categories);
@@ -128,7 +135,9 @@ export default function Dashboard() {
 
   // vencimentos a exibir: atrasadas + próximas 45 dias, não pagas
   const upcomingBills = useMemo(() => {
-    const cutoff = new Date(Date.now() + 45 * 86400000).toISOString().slice(0, 10);
+    // localIsoDate, não toISOString: em UTC−3 depois das 21h o corte pulava um
+    // dia e trazia (ou escondia) um vencimento a mais do que deveria.
+    const cutoff = localIsoDate(new Date(Date.now() + 45 * 86400000));
     return billOccurrences
       .filter(o => o.status === 'atrasada' || (o.status === 'proxima' && o.due_date <= cutoff))
       .slice(0, 6);
@@ -179,7 +188,15 @@ export default function Dashboard() {
   }
 
   async function undoBatch(b) {
-    if (!confirm(t('import.undoConfirm', { file: b.file_name, n: b.inserted }))) return;
+    // Desfazer é DELETE físico: leva embora também as transações que a pessoa
+    // corrigiu à mão, e correção manual não volta do arquivo original. Por isso
+    // a contagem aparece ANTES, no confirm — depois do clique não há como avisar.
+    const edited = (txs || []).filter(tx =>
+      tx.batch_id === b.id &&
+      (tx.original_date != null || tx.original_description != null ||
+       tx.original_amount_cents != null)).length;
+    const aviso = edited > 0 ? `\n\n${tn(edited, 'import.undoManual')}` : '';
+    if (!confirm(t('import.undoConfirm', { file: b.file_name, n: b.inserted }) + aviso)) return;
     const res = await fetch('/api/batches', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -187,6 +204,12 @@ export default function Dashboard() {
     });
     const data = await res.json();
     toast(data.error || t('import.undone', { n: data.removed }), data.error ? '⚠️' : '↩️', !!data.error);
+    // O servidor conta de novo (a tela pode estar com dado velho) e diz onde
+    // ficou o backup — é por ali que a pessoa recupera o que acabou de apagar.
+    if (!data.error && data.manuallyEdited > 0) {
+      toast(tn(data.manuallyEdited, 'import.undoManual'), '⚠️', true);
+    }
+    if (!data.error && data.backup) toast(t('import.undoBackup', { file: data.backup }), '💾');
     await load();
   }
 
@@ -338,22 +361,54 @@ export default function Dashboard() {
     });
   }, [txs, months]);
 
-  // parcelas futuras: compromissos já contratados no cartão
+  // Parcelas futuras: compromissos já contratados no cartão.
+  //
+  // Dois erros moravam aqui, e os dois mentiam sobre dinheiro:
+  //
+  // 1. ÂNCORA ERRADA. `transactions.date` é a data da COMPRA, repetida em todas
+  //    as parcelas — a parcela n não cai em `compra + 1`, cai na fatura em que
+  //    foi cobrada. Ancorando na compra e somando 1, os meses projetados caíam
+  //    no passado e o filtro `ym <= nowYm` os descartava. Agora a âncora é
+  //    `invoice_ref` (competência da fatura, gravada na importação).
+  // 2. CONTAGEM DUPLA. Cada parcela já importada carrega o total, então projetar
+  //    a partir de TODAS as parcelas da mesma compra soma o mesmo mês futuro
+  //    várias vezes (a 1/4 e a 2/4 projetam as mesmas 3/4 e 4/4). Fica só a
+  //    parcela mais avançada de cada compra. A chave de agrupamento é
+  //    `data da compra + descrição sem o sufixo + total`: é exatamente o que as
+  //    parcelas de uma mesma compra têm idêntico no banco.
   const future = useMemo(() => {
-    const map = {};
-    const nowYm = new Date().toISOString().slice(0, 7);
+    const nowYm = localIsoMonth();
+    // compra → parcela mais avançada já importada
+    const perPurchase = new Map();
     for (const tx of txs || []) {
       const parc = installmentOf(tx.description);
       if (!parc || tx.amount_cents >= 0) continue;
+      const key = `${tx.date}|${stripParcela(tx.description).toLowerCase()}|${parc.total}`;
+      const cur = perPurchase.get(key);
+      if (!cur || parc.n > cur.parc.n) perPurchase.set(key, { tx, parc });
+    }
+    const map = {};
+    let approx = 0;
+    for (const { tx, parc } of perPurchase.values()) {
+      // Sem `invoice_ref` (linha importada antes da v4.1, ou parser que não
+      // grava competência) o caminho é APROXIMADO: supõe-se que a parcela n caiu
+      // na fatura de `compra + n`. A regra foi conferida contra as 28 parcelas do
+      // banco real que têm invoice_ref e bate em todas — mas segue suposição, e
+      // por isso o total exibido diz quantas linhas foram estimadas assim.
+      const anchor = tx.invoice_ref || addMonths(tx.date.slice(0, 7), parc.n);
+      if (!tx.invoice_ref) approx++;
       for (let k = 1; k <= parc.total - parc.n; k++) {
-        const ym = addMonths(tx.date.slice(0, 7), k);
-        if (ym <= nowYm) continue; // parcela já deve ter aparecido em fatura importada
+        const ym = addMonths(anchor, k);
+        if (ym <= nowYm) continue; // já apareceu em fatura importada
         map[ym] = map[ym] || { cents: 0, n: 0 };
         map[ym].cents += -tx.amount_cents;
         map[ym].n++;
       }
     }
-    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).slice(0, 4);
+    return {
+      months: Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).slice(0, 4),
+      approx,
+    };
   }, [txs]);
 
   // recorrências: mesma despesa, valor estável, >= 3 meses distintos
@@ -494,7 +549,7 @@ export default function Dashboard() {
           <div className="card-value">{summary.proj != null ? fmtMoney(summary.proj) : '—'}</div>
           <div className="card-sub">
             {summary.proj != null ? t('dash.projSub') : t('dash.projNA')}
-            {future.length > 0 && summary.proj != null ? ` · ${t('dash.projInstallments')}` : ''}
+            {future.months.length > 0 && summary.proj != null ? ` · ${t('dash.projInstallments')}` : ''}
           </div>
         </div>
       </div>
@@ -688,11 +743,11 @@ export default function Dashboard() {
             </div>
           )}
 
-          {future.length > 0 && (
+          {future.months.length > 0 && (
             <div className="panel">
               <div className="panel-head"><h2>{t('dash.future')}</h2></div>
               <div className="panel-body">
-                {future.map(([ym, f]) => (
+                {future.months.map(([ym, f]) => (
                   <div className="future-row" key={ym}>
                     <span>{fmtMonthLong(ym)}</span>
                     <span className="v">{fmtMoney(f.cents)} <span style={{ color: 'var(--muted)', fontWeight: 400 }}>({f.n}x)</span></span>
@@ -700,6 +755,10 @@ export default function Dashboard() {
                 ))}
                 <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 8 }}>
                   {t('dash.futureNote')}
+                  {/* Quantas linhas foram estimadas por data em vez de lidas da
+                      competência da fatura: em dinheiro, o grau de certeza faz
+                      parte do número. */}
+                  {future.approx > 0 ? ` ${tn(future.approx, 'dash.futureApprox')}` : ''}
                 </div>
               </div>
             </div>

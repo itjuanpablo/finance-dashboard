@@ -12,8 +12,18 @@ Dashboard local de finanças: importa extratos e faturas (PDF, OFX, CSV), catego
 ## Como rodar
 
 ```bash
-npm install
-cp .env.example .env.local   # escolha idioma e moeda (opcional; padrão pt-BR)
+bash scripts/instalar.sh
+```
+
+Confere o Node, instala as dependências travadas no lock, pergunta o idioma
+inicial e roda a suíte de testes antes de liberar o uso — um app de finanças que
+não passa nos próprios testes pode mostrar número errado sem avisar.
+
+Manualmente, se preferir:
+
+```bash
+npm ci                       # `ci`, não `install`: usa as versões do lock
+cp .env.example .env.local   # idioma inicial (opcional; padrão pt-BR)
 npm run dev
 ```
 
@@ -130,6 +140,7 @@ verificou e devolve exit 1 se falhar.
 
 ```bash
 node scripts/testar-parsers.mjs        # parsers, perfis de banco, categorizador
+node scripts/testar-importacao.mjs     # pipeline: parse → categoriza → deduplica → grava
 node scripts/testar-api-categorias.mjs # rotas de categoria sobre cópia do banco
 node scripts/verificar-i18n.mjs        # paridade das chaves de tradução
 node scripts/testar-idioma.mjs         # troca de idioma; moeda não segue junto

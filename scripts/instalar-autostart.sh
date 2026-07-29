@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # Instala o Fluxo como serviço do macOS (launchd):
-# sobe sozinho no login, reinicia se cair, e fica sempre em http://localhost:3210
+# sobe sozinho no login, reinicia se cair, e fica sempre em http://127.0.0.1:3210
+#
+# O serviço escuta SÓ no loopback (-H 127.0.0.1). Sem isso, `next start` abre em
+# 0.0.0.0 — todas as interfaces — e qualquer aparelho no mesmo wifi (de casa, do
+# café, do aeroporto) abre as finanças da pessoa sem nenhuma senha: o app não tem
+# login, e o PIN é bloqueio de tela, não autenticação. Para acesso remoto use
+# Tailscale (ver docs/tailscale.md e a mensagem no fim deste script).
 set -euo pipefail
 
 LABEL="com.fluxo.dashboard"
 PORT=3210
+HOST="127.0.0.1"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs"
@@ -42,6 +49,8 @@ cat > "$PLIST" <<EOF
     <string>$NODE_BIN</string>
     <string>$PROJECT_DIR/node_modules/next/dist/bin/next</string>
     <string>start</string>
+    <string>-H</string>
+    <string>$HOST</string>
     <string>-p</string>
     <string>$PORT</string>
   </array>
@@ -60,16 +69,30 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "→ Aguardando o servidor subir…"
 for i in $(seq 1 20); do
-  if curl -s -o /dev/null "http://localhost:$PORT"; then break; fi
+  if curl -s -o /dev/null "http://$HOST:$PORT"; then break; fi
   sleep 1
 done
 
 echo ""
 echo "✅ Fluxo instalado como serviço."
-echo "   • Sempre disponível em:  http://localhost:$PORT"
+echo "   • Sempre disponível em:  http://$HOST:$PORT"
 echo "   • Sobe sozinho no login e reinicia se cair."
 echo "   • Logs:                  $LOG_DIR/fluxo.log"
 echo "   • Após atualizar o código: ./scripts/atualizar.sh"
 echo "   • Para remover:            ./scripts/desinstalar-autostart.sh"
 echo ""
-open "http://localhost:$PORT" || true
+echo "🔒 O serviço escuta APENAS em $HOST (loopback)."
+echo "   Antes desta versão ele abria em 0.0.0.0: qualquer aparelho no mesmo wifi"
+echo "   — inclusive o de um café — alcançava suas finanças sem senha nenhuma."
+echo ""
+echo "📱 Para abrir no celular, publique pelo Tailscale em vez de expor a porta:"
+echo ""
+echo "     tailscale serve --bg http://$HOST:$PORT"
+echo ""
+echo "   Depois abra https://<seu-mac>.<sua-tailnet>.ts.net no celular."
+echo "   Por que é melhor: a porta continua fechada para a rede local, o tráfego"
+echo "   é criptografado ponto a ponto e só os SEUS aparelhos autenticados na"
+echo "   tailnet chegam nele. Detalhes e limitações: docs/tailscale.md"
+echo "   Para desfazer:  tailscale serve --https=443 off"
+echo ""
+open "http://$HOST:$PORT" || true

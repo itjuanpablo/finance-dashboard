@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
-import { getDb, categoryRows } from '@/lib/db';
+import { getDb, categoryRows, backupDb } from '@/lib/db';
 import { SYSTEM_CATEGORIES, slugifyCategory, normalizeName } from '@/lib/categories';
 
 export const runtime = 'nodejs';
@@ -125,6 +125,16 @@ export async function DELETE(request) {
   const txCount = db.prepare(
     'SELECT COUNT(*) AS n FROM transactions WHERE category = ?').get(cat.key).n;
 
+  // Mesmo cuidado do desfazer de importação: isto reescreve `category` em massa
+  // (todas as transações e regras da categoria) e apaga metas. A transação abaixo
+  // protege contra falha no meio, mas não contra arrepender-se depois — só uma
+  // cópia protege disso. Sem backup, não mexe.
+  const backup = backupDb(db, 'pre-catdelete');
+  if (!backup.path) {
+    return NextResponse.json(
+      { error: t('api.backupFailed', { msg: backup.error }) }, { status: 500 });
+  }
+
   db.exec('BEGIN');
   try {
     if (txCount > 0) {
@@ -143,5 +153,7 @@ export async function DELETE(request) {
     db.exec('ROLLBACK');
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
-  return NextResponse.json({ ok: true, moved: txCount });
+  return NextResponse.json({
+    ok: true, moved: txCount, backup: backup.path.split('/').pop(),
+  });
 }

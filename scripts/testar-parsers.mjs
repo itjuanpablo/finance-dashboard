@@ -16,6 +16,7 @@ import { parseOfx, parseOfxFile } from '../lib/parsers/ofx.js';
 import { decodeBuffer, countMojibake, undoMojibake } from '../lib/parsers/encoding.js';
 import { parseMercadoPagoPdf, parseExtrato, parseFatura } from '../lib/parsers/mercadopago.js';
 import { detectBank, BANK_PROFILES } from '../lib/banks/index.js';
+import { parseExtractoAr, detectExtractoAr } from '../lib/parsers/extracto-ar.js';
 import { categorize, KEYWORD_DICTS } from '../lib/categorizer.js';
 import { CAT } from '../lib/categories.js';
 import { t } from '../lib/i18n/index.js';
@@ -921,6 +922,84 @@ ok('todo perfil CSV tem mapeamento csv', BANK_PROFILES
 ok('todo perfil de confiança baixa exige marcador ou é PDF', BANK_PROFILES
   .filter(p => p.confidence === 'baixa')
   .every(p => p.requireMarker || p.formats.includes('pdf')));
+
+
+section('Extrato "Últimos movimientos" — banco argentino (VALIDADO)');
+
+// Fixture SINTÉTICA com a estrutura do documento real: dados inventados, layout
+// observado. Reproduz as três armadilhas do arquivo de verdade:
+//   1. data com BARRA (dd/mm/aaaa), não hífen como no Mercado Pago;
+//   2. sinal negativo ANTES do "$" — ler errado importa despesa como receita;
+//   3. descrição quebrada em várias linhas, e às vezes o valor em linha própria.
+// Os saldos foram calculados à mão para a cadeia fechar; é o que o parser confere.
+const AR_CUENTA = [
+  '',
+  'Últimos movimientos de CUENTA SUELDO / DE LA SEGURIDAD SOCIAL',
+  'Número de cuenta 000000000000000',
+  'Fecha',
+  'Nro.',
+  'Transacción',
+  'DescripciónImporteSaldo',
+  '29/08/20251000000001CAPITALIZACION AH$ 0,50$ 1.500,50',
+  '20/08/2025200001MONOTRIBUTO FISICAS-$ 500,00$ 1.500,00',
+  '18/08/2025200002',
+  'TPUSH ALGUIEN DE ALGUN LADO',
+  'DOC00000000000',
+  '$ 2.000,00$ 2.000,00',
+  '04/08/20251000000002DB TARJETA DE CREDITO VISA',
+  '-$ 300,00',
+  '$ 0,00',
+].join('\n');
+
+eq('extracto AR: detecção', detectExtractoAr(AR_CUENTA), true);
+eq('extracto AR: não rouba um PDF do Mercado Pago', detectExtractoAr(MP_BR_EXTRATO), false);
+
+const arCuenta = parseExtractoAr(AR_CUENTA);
+eq('extracto AR', arCuenta.transactions.map(shape), [
+  { date: '2025-08-29', description: 'CAPITALIZACION AH', cents: 50, source: 'ar-cuenta', id: '1000000001' },
+  // sinal ANTES do $: se lido errado, viraria +500 e a cadeia de saldos não fecharia
+  { date: '2025-08-20', description: 'MONOTRIBUTO FISICAS', cents: -50000, source: 'ar-cuenta', id: '200001' },
+  { date: '2025-08-18', description: 'TPUSH ALGUIEN DE ALGUN LADO DOC00000000000', cents: 200000, source: 'ar-cuenta', id: '200002' },
+  // débito da fatura do cartão = transferência interna (a despesa está na fatura)
+  { date: '2025-08-04', description: 'DB TARJETA DE CREDITO VISA', cents: -30000, source: 'ar-cuenta', transfer: true, id: '1000000002' },
+]);
+ok('extracto AR: cadeia de saldos fecha, sem avisos', arCuenta.warnings.length === 0);
+ok('extracto AR: saldo não vaza para a transação',
+  !('balance' in arCuenta.transactions[0]));
+ok('extracto AR: cabeçalho não entra na descrição',
+  !arCuenta.transactions.some(t => /Fecha|Nro|Importe|Saldo|Último|Número de cuenta/i.test(t.description)));
+
+// CAPITALIZACION é juro de poupança: RECEITA, não transferência. Errar aqui
+// tiraria uma entrada do total do mês.
+ok('extracto AR: CAPITALIZACION não é transferência',
+  arCuenta.transactions.find(t => /CAPITALIZACION/.test(t.description)).transfer === false);
+eq('extracto AR: CAPITALIZACION cai em renda',
+  categorize('CAPITALIZACION AH', [], KEYWORD_DICTS.ar), CAT.INCOME);
+eq('extracto AR: MONOTRIBUTO cai em financeiro',
+  categorize('MONOTRIBUTO FISICAS', [], KEYWORD_DICTS.ar), CAT.FINANCIAL);
+eq('extracto AR: IMP. AFIP cai em financeiro',
+  categorize('IMP. AFIP', [], KEYWORD_DICTS.ar), CAT.FINANCIAL);
+eq('extracto AR: SUPER MAMI cai em comida',
+  categorize('SUPER MAMI', [], KEYWORD_DICTS.ar), CAT.FOOD);
+
+// A validação forte: adulterar UM saldo tem de explodir, não passar batido.
+// É o que pega sinal invertido, movimento perdido e movimento duplicado — erros
+// que a simples contagem de linhas não vê.
+const AR_TORTO = AR_CUENTA.replace('$ 0,50$ 1.500,50', '$ 0,50$ 9.999,99');
+let arExplodiu = null;
+try { parseExtractoAr(AR_TORTO); } catch (e) { arExplodiu = e.message; }
+ok('extracto AR: cadeia adulterada lança erro explícito',
+  arExplodiu && /cadeia de saldos.*não fecha/i.test(arExplodiu),
+  arExplodiu ? `mensagem: ${arExplodiu.slice(0, 90)}…` : 'não lançou');
+ok('extracto AR: o erro diz QUAL movimento divergiu',
+  arExplodiu && /9999,99|9999\.99|9\.999,99/.test(arExplodiu.replace(/\s/g, '')) === false
+    ? /MONOTRIBUTO|CAPITALIZACION/.test(arExplodiu) : true);
+
+// Sinal invertido numa linha: o teste que prova que a cadeia serve para algo.
+const AR_SINAL = AR_CUENTA.replace('-$ 500,00$ 1.500,00', '$ 500,00$ 1.500,00');
+let sinalExplodiu = false;
+try { parseExtractoAr(AR_SINAL); } catch { sinalExplodiu = true; }
+ok('extracto AR: sinal invertido é pego pela cadeia', sinalExplodiu);
 
 // ─── resultado ───────────────────────────────────────────────────────────────
 console.log(`  \x1b[32m${pass - mark} ok\x1b[0m`);
