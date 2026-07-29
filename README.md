@@ -151,7 +151,7 @@ via `FLUXO_DATA_DIR` e conferem no fim que o original não mudou.
 
 ## Privacidade e segurança
 
-Todo o processamento é local. O repositório contém apenas código: o banco (`data/`), logs e builds estão no `.gitignore`. **Nunca comite extratos ou faturas reais** — nem como arquivo de teste.
+Todo o processamento é local. O repositório contém apenas código: o banco (`data/`), logs e builds estão no `.gitignore`.
 
 ## Backup
 
