@@ -17,6 +17,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { execFileSync } from 'child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const TMP = fs.mkdtempSync('/tmp/fluxo-teste-idioma-');
@@ -26,13 +27,14 @@ fs.mkdirSync(process.env.FLUXO_DATA_DIR, { recursive: true });
 const DB_REAL = path.join(ROOT, 'data', 'fluxo.db');
 const antes = fs.existsSync(DB_REAL) ? fs.statSync(DB_REAL) : null;
 
-const { getDb, setSetting, getSetting, localeSettings } =
+const { getDb, setSetting, getSetting, localeSettings, localeWasChosen } =
   await import(path.join(ROOT, 'lib/db.js'));
 const { t } = await import(path.join(ROOT, 'lib/i18n/index.js'));
 const { fmtMoney, fmtMonthLong, fmtDate, currencySymbol } =
   await import(path.join(ROOT, 'lib/format.js'));
-const { resolveLocale, resolveCurrency, DEFAULT_LOCALE } =
+const { resolveLocale, resolveCurrency, DEFAULT_LOCALE, localeFromAcceptLanguage } =
   await import(path.join(ROOT, 'lib/config.js'));
+const { setBrowserLocale } = await import(path.join(ROOT, 'lib/locale-state.js'));
 
 let pass = 0;
 const fails = [];
@@ -56,8 +58,44 @@ const sec = (s) => console.log(`\n\x1b[1m${s}\x1b[0m`);
 const db = getDb();
 
 sec('Estado inicial');
-eq('semeia locale a partir do .env/padrão', getSetting(db, 'locale'), DEFAULT_LOCALE);
-eq('semeia moeda derivada do idioma', getSetting(db, 'currency'), 'BRL');
+// A instalação nova nasce SEM idioma gravado. A ausência é o que permite seguir
+// o navegador; gravar o padrão no primeiro boot transformaria palpite em
+// decisão e obrigaria quem fala espanhol a desfazer na mão.
+ok('não grava idioma no primeiro boot', getSetting(db, 'locale') == null);
+ok('não grava moeda no primeiro boot', getSetting(db, 'currency') == null);
+ok('e sabe que ninguém escolheu ainda', localeWasChosen(db) === false);
+eq('sem nada, cai no padrão', resolveLocale(), DEFAULT_LOCALE);
+eq('e a moeda acompanha o padrão', resolveCurrency(), 'BRL');
+
+sec('Accept-Language → idioma');
+const al = localeFromAcceptLanguage;
+eq('exato', al('es-AR,es;q=0.9,en;q=0.8'), 'es-AR');
+eq('caixa alta/baixa não importa', al('ES-ar'), 'es-AR');
+eq('espanhol de outro país cai no espanhol que existe', al('es-MX,es;q=0.9'), 'es-AR');
+eq('espanhol genérico também', al('es'), 'es-AR');
+eq('português de Portugal cai no português que existe', al('pt-PT'), 'pt-BR');
+// Peso (q=) manda: o navegador diz o que prefere, e a ordem do texto pode mentir.
+eq('respeita o peso q=, não a ordem', al('en;q=0.5,es-AR;q=0.9'), 'es-AR');
+eq('idioma não suportado não vira palpite', al('en-US,en;q=0.9'), null);
+eq('curinga é ignorado', al('*'), null);
+eq('cabeçalho vazio', al(''), null);
+eq('cabeçalho ausente', al(undefined), null);
+
+sec('Detecção na primeira execução');
+setBrowserLocale('es-AR');
+eq('sem escolha gravada, o navegador decide', localeSettings(db).locale, 'es-AR');
+eq('e a moeda vem junto do idioma detectado', localeSettings(db).currency, 'ARS');
+ok('texto sai em espanhol', t('dash.income') === 'Ingresos', t('dash.income'));
+ok('ainda assim nada foi gravado', localeWasChosen(db) === false);
+
+// O ponto que separa palpite de decisão: uma vez escolhido, o navegador perde.
+setSetting(db, 'locale', 'pt-BR');
+eq('escolha da tela vence o navegador', localeSettings(db).locale, 'pt-BR');
+ok('e texto acompanha', t('dash.income') === 'Entradas');
+db.prepare("DELETE FROM settings WHERE key = 'locale'").run();
+eq('apagando a escolha, o palpite volta', localeSettings(db).locale, 'es-AR');
+setSetting(db, 'locale', 'pt-BR');
+setSetting(db, 'currency', 'BRL');
 eq('resolveLocale concorda com o banco', resolveLocale(), DEFAULT_LOCALE);
 
 sec('Troca de idioma');
@@ -104,10 +142,63 @@ eq('settings sobrevivem', JSON.stringify(localeSettings(db)),
   JSON.stringify({ locale: 'pt-BR', currency: 'BRL' }));
 
 sec('Valor inválido não quebra a tela');
+setBrowserLocale(null);   // sem palpite de navegador para atrapalhar a leitura
 setSetting(db, 'locale', 'xx-YY');
 eq('idioma desconhecido cai no padrão', resolveLocale(), DEFAULT_LOCALE);
 ok('e ainda traduz', t('dash.income') === 'Entradas');
 setSetting(db, 'locale', 'pt-BR');
+
+sec('Migração v7 — instalação antiga volta a detectar');
+// Reproduz uma instalação da v4.3.1: idioma semeado no primeiro boot, esquema
+// na versão 6. Precisa de OUTRO processo porque getDb() é singleton de módulo.
+{
+  const dir = path.join(TMP, 'antiga');
+  fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
+  const rodar = (codigo) => execFileSync(
+    process.execPath, ['--input-type=module', '-e', codigo],
+    { cwd: ROOT, env: { ...process.env, FLUXO_DATA_DIR: path.join(dir, 'data') }, encoding: 'utf8' },
+  ).trim();
+
+  // passo 1: nasce "antiga" — locale gravado, user_version = 6
+  rodar(`
+    const { getDb, setSetting } = await import('${ROOT}/lib/db.js');
+    const db = getDb();
+    setSetting(db, 'locale', 'pt-BR');
+    db.exec('PRAGMA user_version = 6');
+  `);
+
+  // passo 2: abre com a v7 — a semente sai, a escolha humana fica
+  const depoisDaMigracao = rodar(`
+    const { getDb, getSetting } = await import('${ROOT}/lib/db.js');
+    const db = getDb();
+    console.log(JSON.stringify({
+      locale: getSetting(db, 'locale') ?? null,
+      versao: db.prepare('PRAGMA user_version').get().user_version,
+    }));
+  `);
+  const m = JSON.parse(depoisDaMigracao);
+  eq('semente de idioma foi removida', m.locale, null);
+  eq('esquema subiu para 7', m.versao, 7);
+
+  // passo 3: quem ESCOLHEU outro idioma não é tocado pela migração
+  const dir2 = path.join(TMP, 'escolhida');
+  fs.mkdirSync(path.join(dir2, 'data'), { recursive: true });
+  const rodar2 = (codigo) => execFileSync(
+    process.execPath, ['--input-type=module', '-e', codigo],
+    { cwd: ROOT, env: { ...process.env, FLUXO_DATA_DIR: path.join(dir2, 'data') }, encoding: 'utf8' },
+  ).trim();
+  rodar2(`
+    const { getDb, setSetting } = await import('${ROOT}/lib/db.js');
+    const db = getDb();
+    setSetting(db, 'locale', 'es-AR');
+    db.exec('PRAGMA user_version = 6');
+  `);
+  const preservado = rodar2(`
+    const { getDb, getSetting } = await import('${ROOT}/lib/db.js');
+    console.log(getSetting(getDb(), 'locale') ?? 'null');
+  `);
+  eq('escolha humana sobrevive à migração', preservado, 'es-AR');
+}
 
 sec('data/fluxo.db intacto');
 const depois = fs.existsSync(DB_REAL) ? fs.statSync(DB_REAL) : null;

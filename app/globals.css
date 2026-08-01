@@ -725,6 +725,33 @@ html.privacy .list-row .sub {
   header .control { max-width: 168px; font-size: 12.5px; }
 }
 
+/* Os 7 atalhos do painel viram SÓ ÍCONE no desktop.
+   ─────────────────────────────────────────────────────────────────────────
+   Por que não é um breakpoint. A largura útil do cabeçalho não depende do
+   tamanho da tela: `.container` trava em 1180px, então sobram ~1132px numa
+   tela de 13" e os mesmos ~1132px num monitor de 27". Ajustar por @media
+   nunca ia resolver — num MacBook Air (1470px de viewport) nenhum breakpoint
+   abaixo de 1400 chega a disparar, e o cabeçalho estourava do mesmo jeito.
+
+   Por que não é questão de apertar mais. Com rótulo, os 7 botões + seletor de
+   período + 🌐 + 👁 + ◐ + logo pedem ~1136px em português: cabe por 4px. Em
+   espanhol os mesmos rótulos ocupam 13% a mais e não cabe. Ou seja, a versão
+   em português nunca esteve "certa" — estava passando raspando, e bastava
+   trocar de idioma para o problema aparecer. Qualquer ajuste de padding só
+   move a margem; o idioma seguinte a consome de novo.
+
+   O que fica constante é o ÍCONE. Sete emojis ocupam o mesmo em qualquer
+   língua, e o nome não se perde: cada botão tem `title` (balão ao passar o
+   mouse) e `aria-label` (leitor de tela). No celular quem navega é a
+   BottomNav, que tem rótulo e não sofre desta restrição.
+
+   Vale só para `.header-right` — os botões "voltar" das subpáginas moram no
+   `.logo`, estão sozinhos e mantêm o texto, que ali é o que orienta. */
+@media (min-width: 641px) {
+  .header-right .hbtn-label { display: none; }
+  .header-right .hbtn { padding: 0 11px; gap: 0; font-size: 15px; }
+}
+
 /* Telas largas: aproveita mais espaço do que os 1180px originais. Numa tabela
    de lançamentos, largura é legibilidade — descrição que cabe não vira "…". */
 @media (min-width: 1401px) { .container { max-width: 1280px; } }

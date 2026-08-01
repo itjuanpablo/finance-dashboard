@@ -247,7 +247,7 @@ function Header() {
   return (
     <header>
       <div className="logo" style={{ gap: 14 }}>
-        <a href="/" className="hbtn desk-only" style={{ textDecoration: 'none' }}>← {t('nav.dashboard')}</a>
+        <a href="/" className="hbtn desk-only" title={t('nav.dashboard')} aria-label={t('nav.dashboard')} style={{ textDecoration: 'none' }}>←<span className="hbtn-label">{t('nav.dashboard')}</span></a>
         <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />{t('cards.title')}</span>
       </div>
       <SeletorIdioma />

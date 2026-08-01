@@ -4,8 +4,10 @@ import PinGate from '@/components/PinGate';
 import BottomNav from '@/components/BottomNav';
 import OfflineAviso from '@/components/OfflineAviso';
 import Rodape from '@/components/Rodape';
+import { headers } from 'next/headers';
 import { t } from '@/lib/i18n';
-import { LOCALES } from '@/lib/config';
+import { LOCALES, localeFromAcceptLanguage } from '@/lib/config';
+import { setBrowserLocale } from '@/lib/locale-state';
 import { getDb, localeSettings } from '@/lib/db';
 
 // Fonte oficial do app, embutida no build (sem requisições externas em runtime).
@@ -19,8 +21,19 @@ export const dynamic = 'force-dynamic';
  * Lê a preferência e a publica para o código de servidor desta requisição.
  * `getDb()` já chama publishLocale ao abrir o banco; repetir aqui garante que o
  * layout — a raiz da árvore — resolva o idioma antes de qualquer página.
+ *
+ * Antes de ler, registra o que o navegador pediu. Só tem efeito enquanto
+ * ninguém escolheu idioma na tela (ver lib/db.js → resolveServerLocale): é o
+ * que faz a primeira execução abrir na língua de quem está na frente da tela
+ * em vez de na língua de quem empacotou o app.
+ *
+ * `headers()` é lido dentro de try: em contextos estáticos ele lança, e um app
+ * sem idioma detectado ainda funciona — um app que não renderiza, não.
  */
 function currentSettings() {
+  try {
+    setBrowserLocale(localeFromAcceptLanguage(headers().get('accept-language')));
+  } catch {}
   return localeSettings(getDb());
 }
 

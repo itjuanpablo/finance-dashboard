@@ -473,13 +473,13 @@ export default function Dashboard() {
       <header>
         <div className="logo"><img src="/icon.svg" alt="" width={30} height={30} style={{ borderRadius: 9 }} />{t('app.name')}</div>
         <div className="header-right">
-          <button className="hbtn desk-only" onClick={() => exportCsv(rows)} title={t('export.title')}>⬇ CSV</button>
-          <button className="hbtn desk-only" onClick={() => setModal('rules')}>🧠 {t('manage.tab.rules')}{rules.length ? ` (${rules.length})` : ''}</button>
-          <button className="hbtn desk-only" onClick={() => setModal('batches')}>🗂 {t('import.batches')}</button>
-          <a className="hbtn desk-only" href="/cartoes" style={{ textDecoration: 'none' }}>💳 {t('nav.cards')}</a>
-          <a className="hbtn desk-only" href="/evolucao" style={{ textDecoration: 'none' }}>📈 {t('nav.evolution')}</a>
-          <a className="hbtn desk-only" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 {t('nav.evolve')}</a>
-          <a className="hbtn desk-only" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ {t('nav.manage')}</a>
+          <button className="hbtn desk-only" onClick={() => exportCsv(rows)} title={t('export.title')} aria-label={t('export.title')}>⬇<span className="hbtn-label">CSV</span></button>
+          <button className="hbtn desk-only" onClick={() => setModal('rules')} title={t('manage.tab.rules')} aria-label={t('manage.tab.rules')}>🧠<span className="hbtn-label">{t('manage.tab.rules')}{rules.length ? ` (${rules.length})` : ''}</span></button>
+          <button className="hbtn desk-only" onClick={() => setModal('batches')} title={t('import.batches')} aria-label={t('import.batches')}>🗂<span className="hbtn-label">{t('import.batches')}</span></button>
+          <a className="hbtn desk-only" href="/cartoes" title={t('nav.cards')} aria-label={t('nav.cards')} style={{ textDecoration: 'none' }}>💳<span className="hbtn-label">{t('nav.cards')}</span></a>
+          <a className="hbtn desk-only" href="/evolucao" title={t('nav.evolution')} aria-label={t('nav.evolution')} style={{ textDecoration: 'none' }}>📈<span className="hbtn-label">{t('nav.evolution')}</span></a>
+          <a className="hbtn desk-only" href="/evoluir" title={t('nav.evolve')} aria-label={t('nav.evolve')} style={{ textDecoration: 'none' }}>🌱<span className="hbtn-label">{t('nav.evolve')}</span></a>
+          <a className="hbtn desk-only" href="/gerenciar" title={t('nav.manage')} aria-label={t('nav.manage')} style={{ textDecoration: 'none' }}>⚙<span className="hbtn-label">{t('nav.manage')}</span></a>
           <select className="control" value={month} onChange={e => { setMonth(e.target.value); setActiveCat(null); }}>
             <option value="">{t('filter.allPeriod')}</option>
             {months.map(m => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}

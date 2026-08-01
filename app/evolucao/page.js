@@ -31,7 +31,7 @@ export default function Evolucao() {
     <div className="container">
       <header>
         <div className="logo" style={{ gap: 14 }}>
-          <a href="/" className="hbtn desk-only" style={{ textDecoration: 'none' }}>← {t('nav.dashboard')}</a>
+          <a href="/" className="hbtn desk-only" title={t('nav.dashboard')} aria-label={t('nav.dashboard')} style={{ textDecoration: 'none' }}>←<span className="hbtn-label">{t('nav.dashboard')}</span></a>
           <span>📈 {t('evolution.title')}</span>
         </div>
         <div className="header-right">

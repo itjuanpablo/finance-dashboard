@@ -47,22 +47,27 @@ else
 fi
 
 # ── 3. Idioma inicial ────────────────────────────────────────────────────────
-# Só semeia a PRIMEIRA execução: depois disso quem manda é o seletor 🌐 na tela,
-# que grava no banco. Por isso não sobrescrevemos um .env.local existente.
+# O padrão é NÃO escrever nada: sem .env.local, o app segue o idioma do
+# navegador na primeira abertura e a pessoa nem precisa saber que existe uma
+# configuração. Fixar aqui só faz sentido para quem quer o idioma travado
+# independentemente de quem abre — porque `.env` vence a detecção.
+#
+# Um .env.local que já exista nunca é sobrescrito.
 if [ ! -f .env.local ]; then
   echo
-  echo "Idioma inicial (dá para trocar depois na tela, no botão 🌐):"
-  echo "  1) Português (Brasil)   — real"
-  echo "  2) Español (Argentina)  — peso argentino"
+  echo "Idioma (dá para trocar a qualquer momento na tela, no botão 🌐):"
+  echo "  1) Detectar pelo navegador   — recomendado"
+  echo "  2) Sempre português (Brasil)"
+  echo "  3) Siempre español (Argentina)"
   printf "Escolha [1]: "
   read -r ESCOLHA || ESCOLHA=1
-  if [ "${ESCOLHA:-1}" = "2" ]; then
-    printf 'NEXT_PUBLIC_FLUXO_LOCALE=es-AR\n' > .env.local
-    echo "✓ .env.local criado (es-AR)"
-  else
-    printf 'NEXT_PUBLIC_FLUXO_LOCALE=pt-BR\n' > .env.local
-    echo "✓ .env.local criado (pt-BR)"
-  fi
+  case "${ESCOLHA:-1}" in
+    2) printf 'NEXT_PUBLIC_FLUXO_LOCALE=pt-BR\n' > .env.local
+       echo "✓ idioma fixado em português" ;;
+    3) printf 'NEXT_PUBLIC_FLUXO_LOCALE=es-AR\n' > .env.local
+       echo "✓ idioma fixado em espanhol" ;;
+    *) echo "✓ o app vai abrir no idioma do navegador" ;;
+  esac
 fi
 
 # ── 4. Testes ────────────────────────────────────────────────────────────────
