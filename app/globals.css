@@ -43,6 +43,12 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 20px 0; margin-bottom: 28px;
   border-bottom: 1px solid var(--border);
+  /* Quebra em DUAS LINHAS quando não cabe, em vez de espremer os botões.
+     Sem isto, o flex encolhia cada botão até o texto quebrar por dentro dele —
+     o ícone ia para uma linha e o rótulo para outra, estourando a altura fixa.
+     É o que acontecia num MacBook Air 13": o cabeçalho pede ~1330px e o
+     conteúdo tem 1180. Duas linhas limpas são melhores que uma linha quebrada. */
+  flex-wrap: wrap; row-gap: 10px;
 }
 .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -.02em; }
 .logo-mark {
@@ -50,7 +56,10 @@ header {
   background: linear-gradient(135deg, var(--accent), #9d6ef4);
   display: grid; place-items: center; color: #fff; font-size: 15px; font-weight: 800;
 }
-.header-right { display: flex; align-items: center; gap: 12px; }
+.header-right {
+  display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap; justify-content: flex-end; row-gap: 8px;
+}
 .theme-toggle {
   width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; font-size: 16px; color: var(--text);
@@ -188,10 +197,17 @@ tbody tr:hover { background: var(--surface-2); }
 
 /* ── Botões do header ───────────────────── */
 .hbtn {
-  height: 36px; border-radius: 10px; border: 1px solid var(--border);
+  /* min-height, não height: altura fixa CORTAVA o conteúdo quando ele crescia,
+     que é exatamente o sintoma que aparecia no notebook — ícone e texto
+     empilhados dentro de 36px. */
+  min-height: 36px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--surface); cursor: pointer; font-size: 13px; color: var(--text);
   padding: 0 12px; font-family: inherit; display: inline-flex; align-items: center; gap: 6px;
   transition: border-color .15s;
+  /* nowrap: o rótulo de um botão nunca deve quebrar por dentro.
+     flex-shrink 0: o botão não encolhe abaixo do próprio texto — quem cede é a
+     linha, que quebra (ver `header`). */
+  white-space: nowrap; flex-shrink: 0;
 }
 .hbtn:hover { border-color: var(--accent); }
 
@@ -688,3 +704,27 @@ html.privacy .list-row .sub {
   .split-parte { flex-wrap: wrap; }
   .split-parte .control:first-child { width: 100%; }
 }
+
+/* ── Notebook 13" (MacBook Air/Pro) ──────────────────────────
+   O cabeçalho tem logo + 7 atalhos + seletor de período + 3 botões de ícone.
+   Em largura de desktop grande sobra espaço; num Air 13" (≈1470px de área útil,
+   1180 de conteúdo) faltavam ~150px, e o resultado era o texto quebrando dentro
+   de cada botão.
+
+   Aqui o cabeçalho é compactado o suficiente para caber em UMA linha. Se ainda
+   não couber — fonte maior do sistema, zoom do navegador, idioma com palavras
+   mais longas —, `header { flex-wrap: wrap }` garante que ele quebre em duas
+   linhas inteiras em vez de espremer. Nunca fica cortado. */
+@media (min-width: 641px) and (max-width: 1400px) {
+  .container { max-width: 100%; padding-left: 20px; padding-right: 20px; }
+  header { gap: 8px; }
+  .header-right { gap: 8px; }
+  .hbtn { padding: 0 9px; font-size: 12.5px; gap: 5px; }
+  .logo { font-size: 16px; }
+  /* o seletor de período é o item mais largo do cabeçalho depois dos atalhos */
+  header .control { max-width: 168px; font-size: 12.5px; }
+}
+
+/* Telas largas: aproveita mais espaço do que os 1180px originais. Numa tabela
+   de lançamentos, largura é legibilidade — descrição que cabe não vira "…". */
+@media (min-width: 1401px) { .container { max-width: 1280px; } }
