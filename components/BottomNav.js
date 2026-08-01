@@ -7,6 +7,7 @@ import { t } from '@/lib/i18n';
 const ITEMS = [
   ['/', '🏠', 'nav.home'],
   ['/cartoes', '💳', 'nav.cards'],
+  ['/evolucao', '📈', 'nav.evolution'],
   ['/evoluir', '🌱', 'nav.evolve'],
   ['/gerenciar', '⚙️', 'nav.manage'],
 ];

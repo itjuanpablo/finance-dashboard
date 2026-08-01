@@ -2,6 +2,8 @@ import './globals.css';
 import { Inter } from 'next/font/google';
 import PinGate from '@/components/PinGate';
 import BottomNav from '@/components/BottomNav';
+import OfflineAviso from '@/components/OfflineAviso';
+import Rodape from '@/components/Rodape';
 import { t } from '@/lib/i18n';
 import { LOCALES } from '@/lib/config';
 import { getDb, localeSettings } from '@/lib/db';
@@ -68,7 +70,9 @@ export default function RootLayout({ children }) {
       <body className={inter.className}>
         <script dangerouslySetInnerHTML={{ __html: localeInit + themeInit }} />
         <PinGate>
+          <OfflineAviso />
           {children}
+          <Rodape />
           <BottomNav />
         </PinGate>
       </body>

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import ContasAPagar from '@/components/ContasAPagar';
+import EstadoVazio from '@/components/EstadoVazio';
+import DividirLancamento from '@/components/DividirLancamento';
 import SeletorIdioma from '@/components/SeletorIdioma';
 import { configurePin } from '@/components/PinGate';
 import { t, tn } from '@/lib/i18n';
@@ -173,7 +175,7 @@ export default function Gerenciar() {
               </div>
               <div className="panel-body">
                 {rules.length === 0
-                  ? <div className="empty">{t('manage.rulesEmpty', { cat: t('cat.to_review') })}</div>
+                  ? <EstadoVazio inline icone="🧠" titulo={t('empty.rulesTitle')} texto={t('empty.rulesText')} />
                   : rules.map(r => (
                     <div className="list-row" key={r.id}>
                       <div className="grow">
@@ -209,7 +211,7 @@ export default function Gerenciar() {
               </div>
               <div className="panel-body">
                 {batches.length === 0
-                  ? <div className="empty">{t('import.batchesEmpty')}</div>
+                  ? <EstadoVazio inline icone="🗂" titulo={t('empty.batchesTitle')} texto={t('empty.batchesText')} />
                   : batches.map(b => (
                     <div className="list-row" key={b.id}>
                       <div className="grow">
@@ -250,6 +252,7 @@ export default function Gerenciar() {
 
 // ═══ Lançamentos ═══════════════════════════════════════
 function Lancamentos({ txs, colors, activeCats, labelOf, accounts, toast, reload }) {
+  const [dividindo, setDividindo] = useState(null); // lançamento sendo dividido
   const [month, setMonth] = useState('');
   const [cat, setCat] = useState('');
   const [type, setType] = useState('');
@@ -410,13 +413,22 @@ function Lancamentos({ txs, colors, activeCats, labelOf, accounts, toast, reload
                         if (cents == null || cents === 0) return toast(t('common.invalidAmount'), '⚠️', null, true);
                         patch(tx.id, { amount_cents: cents }, { amount_cents: tx.amount_cents }, t('manage.amountChanged'));
                       }} />
+                    <button className="split-btn" title={t('split.title')}
+                      aria-label={t('split.title')}
+                      onClick={() => setDividindo(tx)}>⑂</button>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <div className="empty">{t('common.noTx')}</div>}
+        {dividindo && (
+          <DividirLancamento tx={dividindo} cats={activeCats} labelOf={labelOf}
+            onClose={() => setDividindo(null)}
+            onDone={async (msg) => { setDividindo(null); toast(msg, '⑂'); await reload(); }} />
+        )}
+        {rows.length === 0 && <EstadoVazio inline icone="🔍"
+          titulo={t('empty.searchTitle')} texto={t('empty.searchText')} />}
         {rows.length > limit && (
           <div className="pager">
             <button onClick={() => setLimit(l => l + 200)}>{t('common.showMore', { n: rows.length - limit })}</button>

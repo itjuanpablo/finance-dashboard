@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
-import { getDb, categoryRows, backupDb } from '@/lib/db';
+import { getDb, categoryRows, backupDb, ACTIVE_TX } from '@/lib/db';
 import { SYSTEM_CATEGORIES, slugifyCategory, normalizeName } from '@/lib/categories';
 
 export const runtime = 'nodejs';
@@ -24,7 +24,7 @@ export async function GET() {
            COUNT(*) AS n,
            SUM(CASE WHEN amount_cents < 0 AND transfer = 0 THEN -amount_cents ELSE 0 END) AS spent,
            COUNT(DISTINCT substr(date, 1, 7)) AS months
-    FROM transactions WHERE deleted_at IS NULL GROUP BY category
+    FROM transactions WHERE ${ACTIVE_TX} GROUP BY category
   `).all().forEach(r => { stats[r.category] = r; });
   db.prepare('SELECT category, COUNT(*) AS rules FROM rules GROUP BY category')
     .all().forEach(r => { (stats[r.category] = stats[r.category] || {}).rules = r.rules; });

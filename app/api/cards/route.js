@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
-import { getDb } from '@/lib/db';
+import { getDb, ACTIVE_TX } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ function cardPayload(db) {
     'SELECT source, card_id FROM source_bindings WHERE card_id IS NOT NULL').all();
   const openStmt = db.prepare(`
     SELECT COALESCE(SUM(-amount_cents), 0) AS s FROM transactions
-    WHERE deleted_at IS NULL AND amount_cents < 0 AND transfer = 0 AND date > ?
+    WHERE ${ACTIVE_TX} AND amount_cents < 0 AND transfer = 0 AND date > ?
       AND source IN (SELECT source FROM source_bindings WHERE card_id = ?)`);
   const enriched = cards.map(c => {
     const closing = lastClosingDate(c.closing_day);

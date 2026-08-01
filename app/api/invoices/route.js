@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
-import { getDb, categoryColors } from '@/lib/db';
+import { getDb, categoryColors, ACTIVE_TX } from '@/lib/db';
 import { installmentOf, invoicePaymentRef } from '@/lib/parsers/labels';
 
 export const runtime = 'nodejs';
@@ -45,7 +45,7 @@ export async function GET(request) {
   const txs = db.prepare(`
     SELECT id, date, description, amount_cents, category, transfer, invoice_ref
     FROM transactions
-    WHERE deleted_at IS NULL AND source IN (${ph})
+    WHERE ${ACTIVE_TX} AND source IN (${ph})
     ORDER BY date DESC, id DESC
   `).all(...sources);
 

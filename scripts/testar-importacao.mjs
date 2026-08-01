@@ -35,7 +35,7 @@ fs.mkdirSync(process.env.FLUXO_DATA_DIR, { recursive: true });
 const DB_REAL = path.join(ROOT, 'data', 'fluxo.db');
 const antes = fs.existsSync(DB_REAL) ? fs.statSync(DB_REAL) : null;
 
-const { getDb, setSetting } = await import(path.join(ROOT, 'lib/db.js'));
+const { getDb, setSetting, ACTIVE_TX } = await import(path.join(ROOT, 'lib/db.js'));
 const { importFile } = await import(path.join(ROOT, 'lib/importer.js'));
 const { CAT } = await import(path.join(ROOT, 'lib/categories.js'));
 
@@ -169,6 +169,96 @@ ok('todo lote tem transações ou zero declarado',
   db.prepare('SELECT id, inserted FROM batches').all().every(b =>
     contar('SELECT COUNT(*) n FROM transactions WHERE batch_id = ?', b.id).n === b.inserted));
 eq('integridade do SQLite', db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+sec('Dividir lançamento: o total do app NÃO pode mudar');
+
+// Esta é a invariante que justifica a coluna `has_children` e o `ACTIVE_TX`.
+// Dividir é REORGANIZAR um gasto entre categorias — nunca criar nem sumir com
+// dinheiro. Se alguma query esquecer de excluir o lançamento-pai, o valor conta
+// duas vezes e o erro é invisível: o total só fica maior.
+const somaTudo = () => contar(
+  `SELECT COALESCE(SUM(amount_cents),0) n FROM transactions WHERE ${ACTIVE_TX}`).n;
+const contaTudo = () => contar(
+  `SELECT COUNT(*) n FROM transactions WHERE ${ACTIVE_TX}`).n;
+
+await importFile('mercado.csv', buf([
+  'data;descricao;valor',
+  '10/07/2026;SUPERMERCADO DIVIDIR TESTE;-200,00',
+].join('\n')));
+
+const alvo = contar(
+  "SELECT id, amount_cents FROM transactions WHERE description LIKE '%DIVIDIR TESTE%'");
+const somaAntes = somaTudo();
+const contaAntes = contaTudo();
+
+// divide 200 em 150 (comida) + 50 (compras)
+db.exec('BEGIN');
+db.prepare(`INSERT INTO transactions
+  (date, description, amount_cents, category, transfer, source, hash, parent_id)
+  SELECT date, description, -15000, ?, 0, source, 'split:t:0', id FROM transactions WHERE id = ?`)
+  .run(CAT.FOOD, alvo.id);
+db.prepare(`INSERT INTO transactions
+  (date, description, amount_cents, category, transfer, source, hash, parent_id)
+  SELECT date, description, -5000, ?, 0, source, 'split:t:1', id FROM transactions WHERE id = ?`)
+  .run(CAT.SHOPPING, alvo.id);
+db.prepare('UPDATE transactions SET has_children = 1 WHERE id = ?').run(alvo.id);
+db.exec('COMMIT');
+
+eq('a soma de TODOS os lançamentos não mudou', somaTudo(), somaAntes);
+eq('o pai saiu da contagem e entraram 2 partes', contaTudo(), contaAntes + 1);
+ok('o pai não aparece mais nas listagens',
+  contar(`SELECT COUNT(*) n FROM transactions WHERE ${ACTIVE_TX} AND id = ?`, alvo.id).n === 0);
+ok('o pai continua no banco (guarda o hash da deduplicação)',
+  contar('SELECT COUNT(*) n FROM transactions WHERE id = ?', alvo.id).n === 1);
+eq('as partes somam o valor do original',
+  contar('SELECT COALESCE(SUM(amount_cents),0) n FROM transactions WHERE parent_id = ?', alvo.id).n,
+  alvo.amount_cents);
+
+// Reimportar o mesmo arquivo NÃO pode trazer a compra de volta: é para isso que
+// o pai continua existindo com o hash.
+const rRe = await importFile('mercado.csv', buf([
+  'data;descricao;valor',
+  '10/07/2026;SUPERMERCADO DIVIDIR TESTE;-200,00',
+].join('\n')));
+eq('reimportar o arquivo do lançamento dividido não duplica', rRe.inserted, 0);
+eq('e a soma segue igual', somaTudo(), somaAntes);
+
+// desfaz
+db.exec('BEGIN');
+db.prepare('DELETE FROM transactions WHERE parent_id = ?').run(alvo.id);
+db.prepare('UPDATE transactions SET has_children = 0 WHERE id = ?').run(alvo.id);
+db.exec('COMMIT');
+eq('desfazer a divisão devolve a contagem original', contaTudo(), contaAntes);
+eq('e a soma continua a mesma', somaTudo(), somaAntes);
+
+// ─────────────────────────────────────────────────────────────────────────────
+sec('Nenhuma query esqueceu de excluir o lançamento-pai');
+
+// Varredura estática: qualquer WHERE que filtre `deleted_at` sem `has_children`
+// é um lugar onde um lançamento dividido contaria em dobro. Este teste existe
+// porque o erro é silencioso — não quebra nada, só infla o número.
+{
+  const dirs = ['app', 'lib'];
+  const suspeitas = [];
+  const varrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { varrer(p); continue; }
+      if (!e.name.endsWith('.js')) continue;
+      const src = fs.readFileSync(p, 'utf8');
+      src.split('\n').forEach((linha, i) => {
+        if (!/deleted_at\s+IS\s+NULL/i.test(linha)) return;
+        if (/ACTIVE_TX|has_children|^\s*[/*]/.test(linha)) return;
+        suspeitas.push(`${path.relative(ROOT, p)}:${i + 1}`);
+      });
+    }
+  };
+  dirs.forEach(d => varrer(path.join(ROOT, d)));
+  ok('nenhuma query filtra deleted_at sem ACTIVE_TX', suspeitas.length === 0,
+    suspeitas.length ? `contariam em dobro: ${suspeitas.join(', ')}` : '');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 sec('data/fluxo.db intacto');

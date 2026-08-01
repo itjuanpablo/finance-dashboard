@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { computeInsights, localIsoDate, localIsoMonth } from '@/lib/insights';
 import RevisaoMassa from '@/components/RevisaoMassa';
+import EstadoVazio from '@/components/EstadoVazio';
 import SeletorIdioma from '@/components/SeletorIdioma';
 import LancamentoRapido from '@/components/LancamentoRapido';
 import { t, tn, makeCatLabeler } from '@/lib/i18n';
@@ -476,6 +477,7 @@ export default function Dashboard() {
           <button className="hbtn desk-only" onClick={() => setModal('rules')}>🧠 {t('manage.tab.rules')}{rules.length ? ` (${rules.length})` : ''}</button>
           <button className="hbtn desk-only" onClick={() => setModal('batches')}>🗂 {t('import.batches')}</button>
           <a className="hbtn desk-only" href="/cartoes" style={{ textDecoration: 'none' }}>💳 {t('nav.cards')}</a>
+          <a className="hbtn desk-only" href="/evolucao" style={{ textDecoration: 'none' }}>📈 {t('nav.evolution')}</a>
           <a className="hbtn desk-only" href="/evoluir" style={{ textDecoration: 'none' }}>🌱 {t('nav.evolve')}</a>
           <a className="hbtn desk-only" href="/gerenciar" style={{ textDecoration: 'none' }}>⚙ {t('nav.manage')}</a>
           <select className="control" value={month} onChange={e => { setMonth(e.target.value); setActiveCat(null); }}>
@@ -827,9 +829,34 @@ export default function Dashboard() {
                 })}
               </tbody>
             </table>
-            {rows.length === 0 && <div className="empty">
-              {txs.length === 0 ? t('dash.emptyFirst') : t('common.noTx')}
-            </div>}
+            {/* Três situações que pareciam a mesma e têm saídas diferentes:
+                 · banco vazio      → arrastar o primeiro extrato
+                 · mês sem lançamento → trocar o período
+                 · filtro sem resultado → limpar o filtro
+                Antes as três mostravam "Nenhuma transação encontrada", que é
+                verdade e não ajuda ninguém a sair do lugar. */}
+            {rows.length === 0 && (
+              txs.length === 0 ? (
+                <EstadoVazio inline icone="📄"
+                  titulo={t('empty.dashTitle')}
+                  texto={t('empty.dashText')}
+                  nota={t('empty.dashPrivacy')}
+                  acao={{ label: t('empty.dashAction'), onClick: () => fileRef.current?.click() }} />
+              ) : (search || catFilter || typeFilter) ? (
+                <EstadoVazio inline icone="🔍"
+                  titulo={t('empty.searchTitle')}
+                  texto={t('empty.searchText')}
+                  acao={{
+                    label: t('empty.searchAction'),
+                    onClick: () => { setSearch(''); setCatFilter(''); setTypeFilter(''); },
+                  }} />
+              ) : (
+                <EstadoVazio inline icone="📅"
+                  titulo={t('empty.monthTitle', { month: month ? fmtMonthLong(month) : '' })}
+                  texto={t('empty.monthText')}
+                  acao={{ label: t('empty.monthAction'), onClick: () => setMonth('') }} />
+              )
+            )}
             {rows.length > limit && (
               <div className="pager">
                 <button onClick={() => setLimit(l => l + 100)}>{t('common.showMore', { n: rows.length - limit })}</button>
@@ -851,7 +878,7 @@ export default function Dashboard() {
             </div>
             <div className="modal-body">
               {modal === 'rules' && (rules.length === 0
-                ? <div className="empty">{t('manage.rulesEmpty', { cat: t('cat.to_review') })}</div>
+                ? <EstadoVazio inline icone="🧠" titulo={t('empty.rulesTitle')} texto={t('empty.rulesText')} />
                 : rules.map(r => (
                   <div className="list-row" key={r.id}>
                     <div className="grow">
@@ -865,7 +892,7 @@ export default function Dashboard() {
                   </div>
                 )))}
               {modal === 'batches' && (batches.length === 0
-                ? <div className="empty">{t('import.batchesEmpty')}</div>
+                ? <EstadoVazio inline icone="🗂" titulo={t('empty.batchesTitle')} texto={t('empty.batchesText')} />
                 : batches.map(b => (
                   <div className="list-row" key={b.id}>
                     <div className="grow">

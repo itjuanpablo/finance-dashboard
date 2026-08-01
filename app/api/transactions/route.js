@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
 import crypto from 'crypto';
-import { getDb, categoryColors, isValidCategory } from '@/lib/db';
+import { getDb, categoryColors, isValidCategory, ACTIVE_TX } from '@/lib/db';
 import { CAT } from '@/lib/categories';
 
 export const runtime = 'nodejs';
@@ -11,8 +11,24 @@ export const dynamic = 'force-dynamic';
 // apoio (cor, emoji) são indexados pela mesma chave; o nome de exibição é
 // resolvido no cliente por makeCatLabeler.
 
-export async function GET() {
+export async function GET(request) {
   const db = getDb();
+  // ?trash=1 → a lixeira. Só o que foi excluído pelo usuário: um lançamento-pai
+  // (dividido) nunca aparece aqui, porque ele não foi excluído — foi repartido,
+  // e mostrá-lo faria a pessoa "restaurar" algo que ela não apagou.
+  // `request?.url` e não `request.url`: a rota também é chamada direto pelos
+  // testes, sem objeto Request. Estourar aqui transformaria "sem parâmetro" em
+  // erro 500 na listagem principal — a tela mais usada do app.
+  const trash = request?.url && new URL(request.url).searchParams.get('trash') === '1';
+  if (trash) {
+    const trashed = db.prepare(`
+      SELECT id, date, description, amount_cents, category, transfer, source, deleted_at
+      FROM transactions
+      WHERE deleted_at IS NOT NULL AND has_children = 0
+      ORDER BY deleted_at DESC, id DESC
+    `).all();
+    return NextResponse.json({ transactions: trashed, trash: true });
+  }
   // `invoice_ref` e `batch_id` viajam para a tela porque o dashboard precisa
   // deles para não mentir:
   //  · invoice_ref é a competência da fatura em que a parcela FOI cobrada. Sem
@@ -24,7 +40,7 @@ export async function GET() {
     SELECT id, date, description, amount_cents, category, transfer, source, account_id,
            invoice_ref, batch_id,
            original_date, original_description, original_amount_cents
-    FROM transactions WHERE deleted_at IS NULL
+    FROM transactions WHERE ${ACTIVE_TX}
     ORDER BY date DESC, id DESC
   `).all();
   const categoryEmojis = {};
@@ -146,7 +162,7 @@ export async function PATCH(request) {
       .run(p, body.category);
     // só recategoriza o que ainda está pendente de revisão (chave, não nome)
     const res = db.prepare(
-      'UPDATE transactions SET category = ? WHERE category = ? AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE'
+      `UPDATE transactions SET category = ? WHERE category = ? AND ${ACTIVE_TX} AND description LIKE ? COLLATE NOCASE`
     ).run(body.category, CAT.TO_REVIEW, `%${p}%`);
     ruleApplied = res.changes;
   }

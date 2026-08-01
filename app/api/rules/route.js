@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
-import { getDb, isValidCategory } from '@/lib/db';
+import { getDb, isValidCategory, ACTIVE_TX } from '@/lib/db';
 import { CAT } from '@/lib/categories';
 
 export const runtime = 'nodejs';
@@ -36,7 +36,7 @@ export async function POST(request) {
     // próximas importações (ver lib/importer.js).
     applied = db.prepare(
       `UPDATE transactions SET category = ?, transfer = ${category === CAT.TRANSFERS ? 1 : 0}
-       WHERE category = ? AND deleted_at IS NULL AND description LIKE ? COLLATE NOCASE`
+       WHERE category = ? AND ${ACTIVE_TX} AND description LIKE ? COLLATE NOCASE`
     ).run(category, CAT.TO_REVIEW, `%${p}%`).changes;
   }
   return NextResponse.json({ ok: true, applied });
