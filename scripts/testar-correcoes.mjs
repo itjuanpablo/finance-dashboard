@@ -545,29 +545,6 @@ secao('14. GET /api/bills concilia dentro de transação e é idempotente');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 15. Ideias de renda não congelam o idioma
-// ═══════════════════════════════════════════════════════════════════════════
-secao('15. lib/ideias-renda resolve o texto no render, não no import');
-{
-  const { getIdeias } = await import(path.join(ROOT, 'lib/ideias-renda.js'));
-  const mod = await import(path.join(ROOT, 'lib/ideias-renda.js'));
-  ok(typeof getIdeias === 'function', 'exporta função, não constante já resolvida');
-  ok(mod.IDEIAS === undefined,
-    'não exporta mais IDEIAS congelado na carga do módulo', Object.keys(mod));
-  const { setSetting } = await import(path.join(ROOT, 'lib/db.js'));
-  setSetting(db, 'locale', 'pt-BR');
-  const pt = getIdeias();
-  setSetting(db, 'locale', 'es-AR');
-  const es = getIdeias();
-  setSetting(db, 'locale', 'pt-BR');
-  eq(pt.length, 9, 'catálogo com 9 ideias');
-  ok(pt[0].titulo !== es[0].titulo,
-    'trocar o idioma em runtime troca o texto de /evoluir', [pt[0].titulo, es[0].titulo]);
-  ok(pt.every(i => i.titulo && i.investimento && i.esforco && i.passos.length === 3),
-    'estrutura completa em cada ideia');
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // 16. O banco de produção não foi tocado
 // ═══════════════════════════════════════════════════════════════════════════
 secao('16. data/fluxo.db intacto');

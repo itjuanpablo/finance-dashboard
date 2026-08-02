@@ -74,11 +74,18 @@ fi
 # Rodar a suíte na instalação não é zelo excessivo: pega Node incompatível,
 # dependência que veio quebrada e arquivo corrompido no clone — tudo ANTES de a
 # pessoa importar o primeiro extrato e desconfiar do resultado.
+#
+# O pacote de release não traz os testes (ver .gitattributes → export-ignore),
+# então esta etapa só roda em quem clonou o repositório. Quando não há teste, o
+# script DIZ que não conferiu, em vez de imprimir um silêncio que passa por
+# aprovação.
 echo
 echo "→ Conferindo a instalação…"
 FALHOU=0
+RODOU=0
 for T in testar-parsers testar-importacao testar-api-categorias testar-idioma verificar-i18n; do
   if [ -f "scripts/$T.mjs" ]; then
+    RODOU=1
     if node "scripts/$T.mjs" >/tmp/fluxo-$T.log 2>&1; then
       printf "  ✓ %s\n" "$T"
     else
@@ -87,6 +94,10 @@ for T in testar-parsers testar-importacao testar-api-categorias testar-idioma ve
     fi
   fi
 done
+if [ "$RODOU" = "0" ]; then
+  echo "  · pacote de instalação (sem a suíte de testes) — nada a conferir aqui."
+  echo "    O build acima é a garantia: se o código viesse corrompido, ele falharia."
+fi
 if [ "$FALHOU" = "1" ]; then
   echo
   echo "✗ Algum teste falhou. NÃO importe seus extratos ainda —"

@@ -749,7 +749,13 @@ html.privacy .list-row .sub {
    `.logo`, estão sozinhos e mantêm o texto, que ali é o que orienta. */
 @media (min-width: 641px) {
   .header-right .hbtn-label { display: none; }
-  .header-right .hbtn { padding: 0 11px; gap: 0; font-size: 15px; }
+  /* Sem rótulo sobra espaço, e o ícone pode ficar do tamanho que precisa para
+     ser reconhecido de relance — que é o que substitui a palavra aqui. */
+  .header-right .hbtn {
+    padding: 0 12px; gap: 0;
+    font-size: 18px; line-height: 1;
+    min-height: 38px;
+  }
 }
 
 /* Telas largas: aproveita mais espaço do que os 1180px originais. Numa tabela

@@ -1,0 +1,19 @@
+# O que NÃO vai no tarball que o GitHub gera para as releases.
+#
+# `export-ignore` age no `git archive` — e é isso que serve os endpoints
+# /tarball/ e /zipball/ do GitHub, de onde `scripts/criar-atalho.sh` baixa a
+# atualização. Ou seja: o arquivo continua versionado, com histórico e visível
+# no GitHub; ele só não desce para quem instala.
+#
+# Por que não `.gitignore`: gitignore tira do repositório, não do download.
+# Os testes já pegaram três defeitos que passavam silenciosos (categorização
+# desligada, dicionário de idioma congelado no import, atualizador que dizia
+# "pronto" sem ter atualizado). Tirá-los do controle de versão para poupar
+# alguns KB a quem nunca vai abri-los é trocar a rede de segurança por
+# arrumação.
+#
+# Quem instala precisa dos .sh e do código do app. Não precisa de:
+scripts/*.mjs      export-ignore
+scripts/empacotar-fluxo.sh export-ignore
+docs/              export-ignore
+.gitattributes     export-ignore

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getIdeias } from '@/lib/ideias-renda';
 import { t } from '@/lib/i18n';
 import SeletorIdioma from '@/components/SeletorIdioma';
 import { fmtMoney, parseAmountToCents } from '@/lib/format';
@@ -20,20 +19,12 @@ function simulate(inicialCents, aporteCents, taxaAnualPct, meses) {
   return { fv: Math.round(fv), aportado, rendimento: Math.round(fv) - aportado };
 }
 
-const CATS = [
-  ['todas', '', 'common.all'],
-  ['digital', '💻', 'evolve.cat.digital'],
-  ['servicos', '🛠', 'evolve.cat.services'],
-  ['vendas', '🛍', 'evolve.cat.sales'],
-];
-
 const HORIZONS = [['evolve.y1', 12], ['evolve.y5', 60], ['evolve.y10', 120]];
 
 export default function Evoluir() {
   const [inicial, setInicial] = useState('0,00');
   const [aporte, setAporte] = useState('500,00');
   const [taxa, setTaxa] = useState('');
-  const [filtro, setFiltro] = useState('todas');
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get('aporte');
@@ -49,8 +40,6 @@ export default function Evoluir() {
   }, [inicial, aporte, taxaNum]);
 
   const maxFv = rows ? Math.max(...rows.map(r => r.fv)) : 1;
-  // getIdeias() no render, não constante de módulo: o idioma muda em runtime
-  const ideias = getIdeias().filter(i => filtro === 'todas' || i.categoria === filtro);
 
   return (
     <div className="container">
@@ -125,43 +114,6 @@ export default function Evoluir() {
 
           <p style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
             ⚠️ {t('evolve.disclaimer')}
-          </p>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-head">
-          <h2>{t('evolve.ideasTitle')}</h2>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {CATS.map(([k, ico, labelKey]) => (
-              <button key={k} className="hbtn" style={{ height: 28, fontSize: 12,
-                ...(filtro === k ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}) }}
-                onClick={() => setFiltro(k)}>{ico ? `${ico} ` : ''}{t(labelKey)}</button>
-            ))}
-          </div>
-        </div>
-        <div className="panel-body">
-          <div className="acc-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {ideias.map(i => (
-              <div className="acc-card" key={i.key}>
-                <b>{i.titulo}</b>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {t('evolve.ideaMeta', { invest: i.investimento, effort: i.esforco })}
-                </div>
-                <div style={{ fontSize: 12.5, marginTop: 4 }}>
-                  <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--muted)', marginBottom: 4 }}>{t('evolve.howToStart')}</div>
-                  {i.passos.map((p, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
-                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>{idx + 1}.</span>
-                      <span>{p}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 12 }}>
-            {t('evolve.ideasFooter')}
           </p>
         </div>
       </div>
