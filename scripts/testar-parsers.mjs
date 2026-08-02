@@ -17,6 +17,7 @@ import { decodeBuffer, countMojibake, undoMojibake } from '../lib/parsers/encodi
 import { parseMercadoPagoPdf, parseExtrato, parseFatura } from '../lib/parsers/mercadopago.js';
 import { detectBank, BANK_PROFILES } from '../lib/banks/index.js';
 import { parseExtractoAr, detectExtractoAr } from '../lib/parsers/extracto-ar.js';
+import { parseResumenTarjetaAr, detectResumenTarjetaAr, anoDoCiclo } from '../lib/parsers/resumen-tarjeta-ar.js';
 import { categorize, KEYWORD_DICTS } from '../lib/categorizer.js';
 import { CAT } from '../lib/categories.js';
 import { t } from '../lib/i18n/index.js';
@@ -785,28 +786,15 @@ ok('AR: homônimo parcial não conta como autotransferência',
   parseMercadoPagoPdf(MP_AR_EXTRACTO.replace('GOMEZ ANA ', 'GOMEZ CARLA '))
     .transactions.find(t => /GOMEZ CARLA/.test(t.description))?.transfer === false);
 
-const MP_AR_RESUMEN = [
-  'Vencimiento: 10/07/2026',
-  'Movimientos del resumen',
-  'Consumos: $ 139.900,00',
-  'Tarjeta Visa [1234]',
-  'FechaMovimientosValor',
-  '05/07NETFLIX.COM$ 39.900,00',
-  '20/06COTO ABASTOCuota 2 de 6$ 100.000,00',
-].join('\n');
-
-eq('resumen AR', parseMercadoPagoPdf(MP_AR_RESUMEN).transactions.map(shape), [
-  { date: '2026-07-05', description: 'NETFLIX.COM', cents: -3990000, source: 'mp-ar-fatura' },
-  { date: '2026-06-20', description: 'COTO ABASTO (cuota 2/6)', cents: -10000000, source: 'mp-ar-fatura' },
-]);
-
-// O ponto central do "melhor esforço": quando os totais do documento não batem
-// com o que o parser somou, tem de EXPLODIR — não gravar torto em silêncio.
-const MP_AR_RESUMEN_TORTO = MP_AR_RESUMEN.replace('Consumos: $ 139.900,00', 'Consumos: $ 999.999,99');
-let explodiu = null;
-try { parseMercadoPagoPdf(MP_AR_RESUMEN_TORTO); } catch (e) { explodiu = e.message; }
-ok('AR: totais que não fecham lançam erro explícito',
-  explodiu && /totais não fecham/.test(explodiu), explodiu ? `mensagem: ${explodiu}` : 'não lançou nada');
+// O resumo de cartão argentino saiu daqui na v4.3.3. O fixture que existia
+// neste ponto descrevia um documento que NÃO EXISTE: era o layout brasileiro
+// traduzido ("Movimientos del resumen", "Tarjeta Visa [1234]", "Cuota 2 de 6"
+// separado por espaço). Ele passava havia meses e não protegia nada — o resumo
+// real do Mercado Pago Argentina não tem um único desses marcadores.
+//
+// É o risco de testar contra uma suposição: o verde do teste vira argumento
+// para confiar num parser que nunca leu um documento. O caso agora é coberto
+// contra o layout real, no bloco "Resumen de tarjeta AR" mais abaixo.
 
 const MP_AR_SEM_TOTAIS = MP_AR_EXTRACTO
   .replace('Entradas: $ 130.000,00', '').replace('Salidas: $ -45.300,45', '');
@@ -1000,6 +988,146 @@ const AR_SINAL = AR_CUENTA.replace('-$ 500,00$ 1.500,00', '$ 500,00$ 1.500,00');
 let sinalExplodiu = false;
 try { parseExtractoAr(AR_SINAL); } catch { sinalExplodiu = true; }
 ok('extracto AR: sinal invertido é pego pela cadeia', sinalExplodiu);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Resumo de cartão argentino (Mercado Pago)
+// ═════════════════════════════════════════════════════════════════════════════
+section('Resumen de tarjeta AR');
+
+// Fixture SINTÉTICO: mesma estrutura do documento real, comércios e valores
+// inventados. Nenhum dado de pessoa real entra no repositório — o resumo de
+// verdade traz nome, CUIT, DNI e endereço do titular.
+//
+// O que este fixture preserva do original, porque é o que quebra o parser:
+//   · colunas coladas sem separador nenhum;
+//   · datas sem ano, com mês abreviado em três letras;
+//   · pesos e dólares na mesma tabela;
+//   · o bloco do período anterior, que soma zero e não pode ser importado;
+//   · cuota grudada no número de operação ("8 de 9678488").
+const RESUMEN_AR = `
+Tarjeta de crédito
+Este es tu resumen de julio
+Total a pagar
+$ 100.000,00
+US$ 30
+00
+Fecha de cierre
+18 de julio
+Fecha de vencimiento
+23 de julio
+Consolidado
+Saldo del periodo anterior$ 0,00
+Consumos$ 90.000,00US$ 30,00
+Impuestos e intereses$ 10.000,00
+Total a pagar$ 100.000,00US$ 30,00
+
+DETALLE DE MOVIMIENTOS
+Composición del saldo del periodo anterior
+FechaDescripciónPesosDólares
+18/junTotal a pagar del periodo anterior$ 55.000,00US$ 0,00
+26/junPago de tarjeta-$ 55.000,00
+Subtotal$ 0,00US$ 0,00
+Consumos
+Con tarjeta virtual
+FechaDescripciónCuotaOperaciónPesosDólares
+2/dicTIENDA EJEMPLO8 de 9678488$ 20.000,00
+3/maySERVICIO EJEMPLO3 de 3108764$ 10.000,00
+19/junSUSCRIPCION EJEMPLO529124US$ 30,00
+5/julKIOSCO EJEMPLO25469834$ 30.000,00
+Con tarjeta física
+FechaDescripciónCuotaOperaciónPesosDólares
+6/julPARRILLA EJEMPLO620823$ 30.000,00
+Subtotal$ 90.000,00US$ 30,00
+Impuestos e intereses
+1
+FechaDescripciónPesosDólares
+18/julIVA servicios digitales RG 4240$ 7.000,00
+19/julIntereses de financiación$ 3.000,00
+¹ Los impuestos por consumos en moneda extranjera incluyen a todos.
+Subtotal$ 10.000,00US$ 0,00
+Pagos anticipados
+No realizaste pagos anticipados
+Ajustes y reembolsos
+No tenés ajustes ni reembolsos
+Total a pagar$ 100.000,00US$ 30,00
+`.trim();
+
+// Relógio fixo: o ano é INFERIDO do relógio de quem importa, então um teste
+// que use `new Date()` passa hoje e falha em janeiro.
+const HOJE = new Date(2026, 7, 1);   // 1º de agosto de 2026
+const resumen = parseResumenTarjetaAr(RESUMEN_AR, { today: HOJE });
+const rtx = resumen.transactions;
+
+ok('resumen AR: detectado', detectResumenTarjetaAr(RESUMEN_AR));
+ok('resumen AR: não rouba o extrato de conta',
+  detectResumenTarjetaAr('RESUMEN DE CUENTA\nTotal a pagar\nComposición del saldo del periodo anterior') === false);
+eq('resumen AR: 6 lançamentos em pesos (2 do período anterior fora, 1 em dólar fora)',
+  rtx.length, 6);
+
+// O total é o teste que importa: se uma linha se perder, ele muda.
+const rsoma = rtx.reduce((s, x) => s + x.amount, 0);
+eq('resumen AR: soma bate com "Total a pagar" do documento', rsoma.toFixed(2), '-100000.00');
+
+// O período anterior soma zero, mas importá-lo duplicaria a fatura passada:
+// o teste é que ele não aparece, não que a soma continue certa.
+ok('resumen AR: período anterior fica de fora',
+  !rtx.some(x => /periodo anterior|Pago de tarjeta/i.test(x.description)),
+  JSON.stringify(rtx.map(x => x.description)));
+
+// Regressão do bug do mês guloso: com `[a-z]{3,4}` o motor lia "junT" como mês,
+// a linha inteira era descartada e o total ficava MENOR — em silêncio.
+const anterior = rtx.filter(x => x.date.startsWith('2026-06'));
+eq('resumen AR: mês abreviado não engole a primeira letra da descrição',
+  rtx.filter(x => /^EJEMPLO|^IENDA|^ERVICIO/.test(x.description)).length, 0);
+
+// Datas: sem ano no documento, tudo é inferido do fechamento (18/jul).
+const porDesc = Object.fromEntries(rtx.map(x => [x.description, x]));
+eq('resumen AR: cuota antiga cai no ano anterior',
+  porDesc['TIENDA EJEMPLO (cuota 8/9)'].date, '2025-12-02');
+eq('resumen AR: mês antes do fechamento fica no mesmo ano',
+  porDesc['SERVICIO EJEMPLO (cuota 3/3)'].date, '2026-05-03');
+eq('resumen AR: cuota vira sufixo legível',
+  porDesc['TIENDA EJEMPLO (cuota 8/9)'].description, 'TIENDA EJEMPLO (cuota 8/9)');
+eq('resumen AR: competência da fatura', rtx[0].invoiceRef, '2026-07');
+
+// Descrição que termina em dígito é o caso que mais tenta o parser a errar o
+// corte entre nome e número de operação.
+ok('resumen AR: descrição com dígito no fim sobrevive ao corte',
+  !!porDesc['KIOSCO EJEMPLO25'], JSON.stringify(Object.keys(porDesc)));
+
+// Dólar: fora, e DITO. Somar 30 "pesos" onde o documento diz US$ 30 seria o
+// tipo de erro que ninguém percebe.
+eq('resumen AR: consumo em dólar não vira peso', resumen.foreign.length, 1);
+ok('resumen AR: avisa quanto ficou de fora em dólar',
+  resumen.warnings.some(w => /30,00/.test(w)), JSON.stringify(resumen.warnings));
+ok('resumen AR: avisa que o ano foi suposto',
+  resumen.warnings.some(w => /2026/.test(w)), JSON.stringify(resumen.warnings));
+
+// Inferência de ano: fechamento que ainda não chegou pertence ao ano passado.
+eq('anoDoCiclo: fechamento já passou', anoDoCiclo(7, 18, new Date(2026, 7, 1)), 2026);
+eq('anoDoCiclo: fechamento ainda no futuro', anoDoCiclo(12, 18, new Date(2026, 7, 1)), 2025);
+eq('anoDoCiclo: fechamento é hoje', anoDoCiclo(8, 1, new Date(2026, 7, 1)), 2026);
+
+// A checagem de totais é o que separa "importou" de "importou certo".
+let resumenExplodiu = null;
+try {
+  parseResumenTarjetaAr(RESUMEN_AR.replace('6/julPARRILLA EJEMPLO620823$ 30.000,00', ''), { today: HOJE });
+} catch (e) { resumenExplodiu = e.message; }
+ok('resumen AR: linha perdida cancela a importação',
+  resumenExplodiu && /consumos/i.test(resumenExplodiu),
+  resumenExplodiu ? resumenExplodiu.slice(0, 120) : 'não lançou');
+
+let semCiclo = null;
+try {
+  parseResumenTarjetaAr(RESUMEN_AR.replace(/Fecha de cierre\n18 de julio\n/, ''), { today: HOJE });
+} catch (e) { semCiclo = e.message; }
+ok('resumen AR: sem data de fechamento não inventa ano', !!semCiclo,
+  semCiclo ? semCiclo.slice(0, 90) : 'não lançou');
+
+// O perfil de banco precisa reconhecer o mesmo documento que o parser lê —
+// senão a tela diz "origem desconhecida" para algo que foi lido com precisão.
+eq('resumen AR: perfil de banco casa',
+  detectBank(RESUMEN_AR, 'resumen.pdf', 'pdf')?.id, 'mp-ar-resumen');
 
 // ─── resultado ───────────────────────────────────────────────────────────────
 console.log(`  \x1b[32m${pass - mark} ok\x1b[0m`);
