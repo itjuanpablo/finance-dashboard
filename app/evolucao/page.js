@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import EstadoVazio from '@/components/EstadoVazio';
-import SeletorIdioma from '@/components/SeletorIdioma';
+import AcoesCabecalho from '@/components/AcoesCabecalho';
 import { t } from '@/lib/i18n';
 import { fmtMoney, fmtMoney0, fmtMonthShort, fmtMonthLong, fmtDate } from '@/lib/format';
 
@@ -34,7 +34,7 @@ export default function Evolucao() {
           <a href="/" className="hbtn desk-only" title={t('nav.dashboard')} aria-label={t('nav.dashboard')} style={{ textDecoration: 'none' }}>←<span className="hbtn-label">{t('nav.dashboard')}</span></a>
           <span>📈 {t('evolution.title')}</span>
         </div>
-        <div className="header-right">
+        <AcoesCabecalho>
           {data.years?.length > 1 && (
             <select className="control" value={ano} onChange={e => setAno(e.target.value)}
               aria-label={t('evolution.yearFilter')}>
@@ -42,8 +42,7 @@ export default function Evolucao() {
               {data.years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           )}
-          <SeletorIdioma />
-        </div>
+        </AcoesCabecalho>
       </header>
 
       {(data.erro || !data.months?.length) ? (

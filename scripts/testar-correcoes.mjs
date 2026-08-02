@@ -545,6 +545,43 @@ secao('14. GET /api/bills concilia dentro de transação e é idempotente');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 15. Todo <header> tem exatamente DOIS filhos diretos
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// `header` é flex com `justify-content: space-between`. Com dois filhos, isso
+// significa "título à esquerda, ações à direita". Com quatro, significa "espalhe
+// tudo pela largura da tela" — e foi o que aconteceu em Administrar, Crescer e
+// Resumos, onde os botões 🌐 🔒 👁 ◐ eram filhos diretos do header.
+//
+// O defeito não dá erro, não quebra teste e não aparece em tela pequena (aí o
+// flex-wrap disfarça). Só aparece no monitor de quem usa. Por isso a checagem
+// é estática: conta os filhos no JSX, sem precisar de navegador.
+secao('15. Cabeçalhos com dois filhos diretos (título + ações)');
+{
+  const paginas = fs.readdirSync(path.join(ROOT, 'app'), { withFileTypes: true })
+    .filter(e => e.isDirectory() && e.name !== 'api')
+    .map(e => path.join('app', e.name, 'page.js'))
+    .concat(['app/page.js'])
+    .filter(f => fs.existsSync(path.join(ROOT, f)));
+
+  for (const rel of paginas) {
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    const bloco = src.match(/<header[^>]*>([\s\S]*?)<\/header>/);
+    if (!bloco) continue;
+
+    // Conta tags de abertura no nível mais externo do bloco.
+    let nivel = 0, filhos = 0;
+    for (const tag of bloco[1].matchAll(/<(\/?)([A-Za-z][\w.]*)([^>]*?)(\/?)>/g)) {
+      const [, fecha, , , autoFecha] = tag;
+      if (fecha) { nivel--; continue; }
+      if (nivel === 0) filhos++;
+      if (!autoFecha.trim()) nivel++;
+    }
+    ok(filhos === 2, `${rel}: <header> com 2 filhos diretos`, { filhos });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 16. O banco de produção não foi tocado
 // ═══════════════════════════════════════════════════════════════════════════
 secao('16. data/fluxo.db intacto');

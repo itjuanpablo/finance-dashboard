@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { computeInsights, localIsoDate, localIsoMonth } from '@/lib/insights';
 import RevisaoMassa from '@/components/RevisaoMassa';
 import EstadoVazio from '@/components/EstadoVazio';
-import SeletorIdioma from '@/components/SeletorIdioma';
+import AcoesCabecalho from '@/components/AcoesCabecalho';
 import LancamentoRapido from '@/components/LancamentoRapido';
 import { t, tn, makeCatLabeler } from '@/lib/i18n';
 import { CAT, NON_BUDGET_CATEGORIES } from '@/lib/categories';
@@ -472,7 +472,7 @@ export default function Dashboard() {
     <div className="container">
       <header>
         <div className="logo"><img src="/icon.svg" alt="" width={30} height={30} style={{ borderRadius: 9 }} />{t('app.name')}</div>
-        <div className="header-right">
+        <AcoesCabecalho>
           <button className="hbtn desk-only" onClick={() => exportCsv(rows)} title={t('export.title')} aria-label={t('export.title')}>⬇<span className="hbtn-label">CSV</span></button>
           <button className="hbtn desk-only" onClick={() => setModal('rules')} title={t('manage.tab.rules')} aria-label={t('manage.tab.rules')}>🧠<span className="hbtn-label">{t('manage.tab.rules')}{rules.length ? ` (${rules.length})` : ''}</span></button>
           <button className="hbtn desk-only" onClick={() => setModal('batches')} title={t('import.batches')} aria-label={t('import.batches')}>🗂<span className="hbtn-label">{t('import.batches')}</span></button>
@@ -484,19 +484,7 @@ export default function Dashboard() {
             <option value="">{t('filter.allPeriod')}</option>
             {months.map(m => <option key={m} value={m}>{fmtMonthLong(m)}</option>)}
           </select>
-          <SeletorIdioma />
-          <button className="theme-toggle" title={t('common.privacyTitle')} onClick={() => {
-            const on = document.documentElement.classList.toggle('privacy');
-            try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}
-          }}>👁</button>
-          <button className="theme-toggle" title={t('common.themeTitle')} onClick={() => {
-            document.documentElement.classList.toggle('dark');
-            try {
-              localStorage.setItem('fluxo-theme',
-                document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-            } catch (e) {}
-          }}>◐</button>
-        </div>
+        </AcoesCabecalho>
       </header>
 
       <div className="greeting">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { t, makeCatLabeler } from '@/lib/i18n';
 import { localIsoMonth } from '@/lib/insights';
 import { fmtMoney, fmtDayMonth, fmtMonthLong, fmtToday } from '@/lib/format';
+import AcoesCabecalho from '@/components/AcoesCabecalho';
 
 const addMonths = (ym, k) => {
   const y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + k;
@@ -80,7 +81,9 @@ export default function Relatorio() {
           <a href="/" className="hbtn desk-only" title={t('nav.dashboard')} aria-label={t('nav.dashboard')} style={{ textDecoration: 'none' }}>←<span className="hbtn-label">{t('nav.dashboard')}</span></a>
           <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />{t('report.title')}</span>
         </div>
-        <button className="hbtn" onClick={() => window.print()}>🖨 {t('report.print')}</button>
+        <AcoesCabecalho>
+          <button className="hbtn" onClick={() => window.print()}>🖨 {t('report.print')}</button>
+        </AcoesCabecalho>
       </header>
 
       <div style={{ margin: '8px 0 20px' }}>

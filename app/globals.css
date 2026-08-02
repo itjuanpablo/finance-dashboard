@@ -220,7 +220,15 @@ tbody tr:hover { background: var(--surface-2); }
 .goal-row .name { flex: 1; display: flex; align-items: center; gap: 8px; }
 .goal-row .nums { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .goal-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 2px 0 8px; }
-.goal-bar div { height: 100%; border-radius: 99px; transition: width .3s; }
+.goal-bar div {
+  height: 100%; border-radius: 99px; transition: width .3s;
+  /* Uma fatura de $ 14,90 num limite de $ 3.100 dá 0,48% de barra: três pixels
+     soltos que a pessoa lê como sujeira na tela, não como "gastei pouco".
+     O mínimo transforma isso num traço curto e legível. Só vale quando há
+     algum gasto — o seletor :not() garante que barra zerada continue vazia. */
+  min-width: 10px;
+}
+.goal-bar div[style*="width: 0%"] { min-width: 0; }
 .goal-del {
   border: 0; background: none; color: var(--muted); cursor: pointer;
   font-size: 13px; padding: 2px 4px; border-radius: 6px;

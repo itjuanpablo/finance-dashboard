@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import ContasAPagar from '@/components/ContasAPagar';
 import EstadoVazio from '@/components/EstadoVazio';
 import DividirLancamento from '@/components/DividirLancamento';
-import SeletorIdioma from '@/components/SeletorIdioma';
-import { configurePin } from '@/components/PinGate';
+import AcoesCabecalho from '@/components/AcoesCabecalho';
 import { t, tn } from '@/lib/i18n';
 import { CAT } from '@/lib/categories';
 import { stripInstallment } from '@/lib/parsers/labels';
@@ -119,22 +118,7 @@ export default function Gerenciar() {
           <a href="/" className="hbtn desk-only" title={t('nav.dashboard')} aria-label={t('nav.dashboard')} style={{ textDecoration: 'none' }}>←<span className="hbtn-label">{t('nav.dashboard')}</span></a>
           <span><img src="/icon.svg" alt="" width={26} height={26} style={{ borderRadius: 8, verticalAlign: 'middle', marginRight: 8 }} />{t('nav.manage')}</span>
         </div>
-        <SeletorIdioma />
-        <button className="theme-toggle" title={t('pin.configTitle')} onClick={async () => {
-          const msg = await configurePin();
-          if (msg) alert(msg);
-        }} style={{ marginRight: 8 }}>🔒</button>
-        <button className="theme-toggle" title={t('common.privacyTitle')} onClick={() => {
-          const on = document.documentElement.classList.toggle('privacy');
-          try { localStorage.setItem('fluxo-privacy', on ? '1' : '0'); } catch (e) {}
-        }} style={{ marginRight: 8 }}>👁</button>
-        <button className="theme-toggle" title={t('common.themeTitle')} onClick={() => {
-          document.documentElement.classList.toggle('dark');
-          try {
-            localStorage.setItem('fluxo-theme',
-              document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-          } catch (e) {}
-        }}>◐</button>
+        <AcoesCabecalho pin />
       </header>
 
       <div className="manage-layout">
