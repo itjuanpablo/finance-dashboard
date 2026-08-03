@@ -115,6 +115,10 @@ header {
   padding: 18px 20px 0; display: flex; align-items: center;
   justify-content: space-between; gap: 12px; flex-wrap: wrap;
 }
+/* Sem isto o <h2> se recusa a quebrar e empurra o botão do lado para fora:
+   filho de flex tem min-width auto, ou seja, "não fico menor que meu texto". */
+.panel-head > * { min-width: 0; }
+.panel-head h2 { overflow-wrap: anywhere; }
 .panel-head h2 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 
 /* ── Donut ──────────────────────────────── */
@@ -216,7 +220,7 @@ tbody tr:hover { background: var(--surface-2); }
 .panel-body { padding: 14px 20px 20px; }
 
 /* ── Metas ──────────────────────────────── */
-.goal-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 0; }
+.goal-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 6px 0; flex-wrap: wrap; }
 .goal-row .name { flex: 1; display: flex; align-items: center; gap: 8px; }
 .goal-row .nums { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .goal-bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin: 2px 0 8px; }
@@ -234,7 +238,15 @@ tbody tr:hover { background: var(--surface-2); }
   font-size: 13px; padding: 2px 4px; border-radius: 6px;
 }
 .goal-del:hover { color: var(--red); background: var(--surface-2); }
-.goal-form { display: flex; gap: 8px; margin-top: 12px; }
+.goal-form {
+  display: flex; gap: 8px; margin-top: 12px;
+  /* Três controles (categoria, valor, botão) numa linha só. No celular os
+     inputs sobem para 16px — obrigatório, senão o iOS dá zoom ao focar — e o
+     conjunto passa dos ~380px úteis. Sem quebra, o botão "+" saía da tela. */
+  flex-wrap: wrap;
+}
+.goal-form select { flex: 1; min-width: 140px; }
+.goal-form input { flex: 1; min-width: 110px; }
 .goal-form select { flex: 1; min-width: 0; }
 .goal-form input {
   width: 90px; background: var(--surface-2); border: 1px solid var(--border);
@@ -248,7 +260,15 @@ tbody tr:hover { background: var(--surface-2); }
 
 /* ── Evolução / parcelas ────────────────── */
 .evo-labels { display: flex; justify-content: space-around; font-size: 11px; color: var(--muted); margin-top: 4px; }
-.future-row { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+/* `space-between` com rótulo à esquerda e valor à direita. Em espanhol o
+   rótulo é mais longo ("Septiembre 2026" contra "set/2026") e o par deixava de
+   caber em 406px: o valor era empurrado para fora. `wrap` faz o valor descer
+   uma linha; `min-width: 0` deixa o rótulo quebrar em vez de esticar a linha. */
+.future-row {
+  display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border);
+}
+.future-row > * { min-width: 0; }
 .future-row:last-child { border-bottom: 0; }
 .future-row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -267,8 +287,9 @@ tbody tr:hover { background: var(--surface-2); }
 }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border);
 }
+.modal-head > div { min-width: 0; }
 .modal-head h3 { font-size: 15px; font-weight: 600; }
 .modal-head p { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .modal-close {
@@ -278,7 +299,7 @@ tbody tr:hover { background: var(--surface-2); }
 .modal-close:hover { background: var(--surface-2); }
 .modal-body { overflow-y: auto; padding: 8px 20px 16px; }
 .list-row {
-  display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 0;
   border-bottom: 1px solid var(--border); font-size: 13px;
 }
 .list-row:last-child { border-bottom: 0; }
@@ -293,7 +314,10 @@ tbody tr:hover { background: var(--surface-2); }
 /* ── Página Gerenciar ───────────────────── */
 .manage-layout { display: flex; gap: 16px; align-items: start; }
 .manage-side {
-  width: 172px; flex-shrink: 0; position: sticky; top: 16px;
+  /* 172px cabia "Contas a pagar" e não cabe "Facturas y servicios" — de novo a
+     largura calibrada por palavra. 200px cobre os rótulos das duas línguas com
+     folga, e o custo é 28px numa coluna lateral. */
+  width: 200px; flex-shrink: 0; position: sticky; top: 16px;
   display: flex; flex-direction: column; gap: 2px;
 }
 .side-item {
@@ -308,6 +332,12 @@ tbody tr:hover { background: var(--surface-2); }
 @media (max-width: 800px) {
   .manage-layout { flex-direction: column; }
   .manage-side { width: 100%; position: static; flex-direction: row; overflow-x: auto; }
+  /* `overflow-x: auto` só serve se os itens SE RECUSAREM a caber. Sem isto eles
+     têm flex-shrink: 1 (o padrão), então em vez de a fileira rolar, cada item
+     era espremido e o rótulo quebrava em duas linhas — "Facturas y servicios"
+     virava duas, "Cuentas y tarjetas" também. A rolagem existia no CSS e nunca
+     acontecia. */
+  .manage-side .side-item { flex-shrink: 0; white-space: nowrap; }
 }
 .inline-edit {
   background: var(--surface-2); border: 1px solid var(--accent);
@@ -412,7 +442,7 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 /* ── Página Cartões / Faturas ───────────── */
 .inv-nav {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px 12px; gap: 12px;
+  flex-wrap: wrap; padding: 18px 20px 12px; gap: 12px;
 }
 .status-badge {
   display: inline-block; margin-top: 6px; font-size: 10.5px; font-weight: 700;
@@ -499,7 +529,14 @@ tbody tr td { transition: background .12s; }
   .logo { font-size: 16px; flex-shrink: 0; }
   /* no celular, os atalhos de navegação vivem na barra inferior */
   .desk-only { display: none !important; }
-  .header-right { flex-wrap: nowrap; min-width: 0; }
+  /* `flex-wrap: nowrap` vivia aqui para manter o seletor de mês na mesma linha
+     dos botões, no painel. O efeito colateral é que, junto com
+     `theme-toggle { flex-shrink: 0 }`, nada podia ceder — a mesma armadilha que
+     fez o botão "Archivar" sair do cartão. Em Administrar, que tem quatro
+     botões e nenhum seletor, isso é risco puro sem benefício.
+     Com `wrap`, o seletor continua crescendo na linha (`flex: 1`) quando cabe,
+     e o que não couber desce em vez de transbordar. */
+  .header-right { flex-wrap: wrap; min-width: 0; }
   .header-right .control { flex: 1; min-width: 0; }
   .header-right .theme-toggle { flex-shrink: 0; }
 
@@ -536,6 +573,17 @@ tbody tr td { transition: background .12s; }
   thead th { padding: 10px 10px; }
   tbody td { padding: 10px 10px; font-size: 13px; }
   .desc small { display: none; }
+  /* Descrição de extrato pode vir com o CNPJ e o endereço inteiro do banco
+     dentro. No desktop isso ocupa duas linhas; num celular de 406px vira dez, e
+     UM lançamento toma a tela inteira — a lista deixa de ser lista.
+     Três linhas e corta. O texto completo continua ao tocar para editar. */
+  tbody .desc {
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden; overflow-wrap: anywhere;
+  }
+  /* Colunas mais estreitas: o que empurra a tabela para além da tela é a soma
+     dos mínimos das cinco colunas, e o padding entra nessa conta cinco vezes. */
+  thead th, tbody td { padding: 10px 8px; }
   .modal { max-width: 100%; max-height: 88vh; }
   .modal-overlay { padding: 10px; align-items: flex-end; }
 
@@ -681,6 +729,7 @@ html.privacy .list-row .sub {
 .curva { width: 100%; height: auto; display: block; }
 .curva-eixo {
   display: flex; justify-content: space-between; align-items: center;
+  gap: 8px; flex-wrap: wrap;
   font-size: 11px; color: var(--muted); margin-top: 6px;
 }
 .ano-grid { display: flex; flex-direction: column; gap: 2px; }
@@ -715,10 +764,11 @@ html.privacy .list-row .sub {
 }
 .split-btn:hover { border-color: var(--accent); color: var(--accent); }
 .split-origem {
-  display: flex; gap: 10px; align-items: center; padding: 10px 12px;
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 12px;
   background: var(--bg); border-radius: 10px; margin-bottom: 14px; font-size: 13px;
 }
-.split-parte { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.split-parte { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
 .split-parte .control:first-child { width: 130px; flex-shrink: 0; }
 .split-parte .control:nth-child(2) { flex: 1; }
 .split-fill, .split-del {
