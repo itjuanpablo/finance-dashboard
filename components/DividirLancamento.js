@@ -121,7 +121,7 @@ export default function DividirLancamento({ tx, cats, labelOf, onClose, onDone }
 
           {erro && <p style={{ color: 'var(--red)', fontSize: 12.5 }}>{erro}</p>}
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <div className="btn-row end" style={{ marginTop: 16 }}>
             <button className="state-btn" onClick={onClose}>{t('common.cancel')}</button>
             <button className="state-btn primary" disabled={!completo || salvando} onClick={salvar}>
               {salvando ? t('common.saving') : t('split.action')}

@@ -83,7 +83,7 @@ export default function ContasAPagar({ cats, toast }) {
       </div>
       <div className="panel-body">
         {editing === 'new' && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div className="btn-row" style={{ marginBottom: 10 }}>
             <span style={{ fontSize: 12, color: 'var(--muted)', alignSelf: 'center' }}>{t('bills.presets')}</span>
             {PRESETS.map(p => (
               <button key={p.key} className="hbtn" style={{ height: 28, fontSize: 12 }}
@@ -125,7 +125,7 @@ export default function ContasAPagar({ cats, toast }) {
                 onChange={e => setForm(f => ({ ...f, match_pattern: e.target.value }))}
                 style={{ gridColumn: '1 / -1' }} />
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="btn-row end">
               <button className="hbtn" onClick={() => { setEditing(null); setForm(EMPTY); }}>{t('common.cancel')}</button>
               <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={save}>{t('common.save')}</button>
             </div>

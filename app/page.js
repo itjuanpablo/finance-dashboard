@@ -495,7 +495,7 @@ export default function Dashboard() {
             {userName || t('dash.setName')}
           </button>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="btn-row">
           <button className="hbtn" style={{ color: 'var(--red)' }} title={t('dash.shortcutExpense')}
             onClick={() => setQuickAdd('despesa')}>− {t('dash.expense')}</button>
           <button className="hbtn" style={{ color: 'var(--green)' }} title={t('dash.shortcutIncome')}

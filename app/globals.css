@@ -342,7 +342,31 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 .acc-card {
   background: var(--surface-2); border-radius: 12px; padding: 14px;
   display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+  /* Item de grade tem `min-width: auto` por padrão, ou seja: ele se recusa a
+     ficar menor que o conteúdo. Sem `min-width: 0` o cartão não encolhe — quem
+     "cede" é o desenho, e os botões saem por fora do fundo cinza. */
+  min-width: 0;
 }
+
+/* Qualquer fileira de botões.
+   ─────────────────────────────────────────────────────────────────────────
+   `.hbtn` tem `flex-shrink: 0` e `white-space: nowrap` — decisão certa, tomada
+   para o cabeçalho: botão não deve encolher nem quebrar por dentro. A
+   consequência é que uma fileira de botões SEM `flex-wrap` não tem como ceder,
+   e transborda o que estiver em volta.
+
+   Foi o que aconteceu no cartão: em português "Faturas · Editar · Arquivar"
+   cabia nos ~280px da coluna; em espanhol "Resúmenes · Editar · Archivar"
+   passa por poucos pixels, e o Archivar aparecia por fora do fundo cinza.
+
+   Apertar o padding resolveria hoje e voltaria a quebrar no idioma seguinte —
+   a mesma armadilha de medir palavra. Com quebra, o que não couber desce uma
+   linha, em qualquer língua. Por isso a regra vale para TODA fileira de
+   botões, não só a do cartão (ver scripts/testar-correcoes.mjs, seção 15). */
+.btn-row {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.btn-row.end { justify-content: flex-end; }
 .acc-card .big { font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .acc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .acc-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

@@ -102,7 +102,7 @@ export default function Cartoes() {
     <div className="container">
       <Header />
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="btn-row" style={{ marginBottom: 16 }}>
         {cards.map(c => (
           <button key={c.id} className="hbtn"
             style={cardId === c.id ? { borderColor: 'var(--accent)', color: 'var(--accent)', fontWeight: 600 } : undefined}

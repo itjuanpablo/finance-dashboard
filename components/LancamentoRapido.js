@@ -56,7 +56,7 @@ export default function LancamentoRapido({ tipo, categories, emojis = {}, label 
             <input placeholder={isDespesa ? t('quick.descExpense') : t('quick.descIncome')}
               value={desc} onChange={e => setDesc(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && save()} />
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="btn-row">
               <input type="date" style={{ flex: 1 }} value={date} onChange={e => setDate(e.target.value)} />
               <select className="control" style={{ flex: 1 }} value={cat} onChange={e => setCat(e.target.value)}>
                 <option value="">{t('common.categoryPick')}</option>

@@ -461,7 +461,7 @@ function Categorias({ cats, toast, reload }) {
 
   const Editor = () => (
     <div className="cat-editor">
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div className="btn-row">
         <input style={{ width: 54, textAlign: 'center' }} placeholder="🏷" maxLength={4}
           value={draft.emoji ?? ''} onChange={e => setDraft(x => ({ ...x, emoji: e.target.value }))} />
         <input style={{ flex: 1 }} placeholder={t('manage.catName')} autoFocus
@@ -474,7 +474,7 @@ function Categorias({ cats, toast, reload }) {
             style={{ background: c }} onClick={() => setDraft(x => ({ ...x, color: c }))} />
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+      <div className="btn-row end">
         <button className="hbtn" onClick={() => { setEditing(null); setAdding(false); }}>{t('common.cancel')}</button>
         <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
           onClick={save}>{t('common.save')}</button>
@@ -642,7 +642,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                 <div style={{ color: 'var(--muted)', fontSize: 12 }}>
                   {a.institution}{a.sources.length ? ` · ${a.sources.join(', ')}` : ` · ${t('manage.noLinkedSource')}`}
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div className="btn-row">
                   <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={() => {
                     setEditAcc(a.id); setEditCard(null);
                     setDraft({
@@ -682,7 +682,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                   onChange={e => setDraft(x => ({ ...x, initial_date: e.target.value }))} />
                 <SourcePicker />
               </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <div className="btn-row end">
                 <button className="hbtn" onClick={() => setEditAcc(null)}>{t('common.cancel')}</button>
                 <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={saveAcc}>{t('common.save')}</button>
               </div>
@@ -718,7 +718,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                       </div>
                     </>
                   )}
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div className="btn-row">
                     <a className="hbtn" style={{ height: 28, fontSize: 12, textDecoration: 'none' }}
                       href={`/cartoes?card=${c.id}`}>{t('nav.cards')}</a>
                     <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={() => {
@@ -758,7 +758,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                   onChange={e => setDraft(x => ({ ...x, due_day: e.target.value }))} />
                 <SourcePicker />
               </div>
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <div className="btn-row end">
                 <button className="hbtn" onClick={() => setEditCard(null)}>{t('common.cancel')}</button>
                 <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }} onClick={saveCard}>{t('common.save')}</button>
               </div>

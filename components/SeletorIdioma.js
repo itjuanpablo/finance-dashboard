@@ -87,7 +87,7 @@ export default function SeletorIdioma() {
                 {t('settings.currencyWarning')}
               </p>
 
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+              <div className="btn-row end" style={{ marginTop: 20 }}>
                 <button className="hbtn" onClick={() => setOpen(false)}>{t('common.cancel')}</button>
                 <button className="hbtn" disabled={!dirty || saving} onClick={save}
                   style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}>

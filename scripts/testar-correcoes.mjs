@@ -582,6 +582,70 @@ secao('15. Cabeçalhos com dois filhos diretos (título + ações)');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// 15b. Nenhuma fileira de botões pode transbordar
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// `.hbtn` tem `flex-shrink: 0` e `white-space: nowrap` — escolha certa, feita
+// para o cabeçalho. A consequência é que uma fileira de botões sem
+// `flex-wrap` NÃO TEM COMO CEDER: ela transborda o que estiver em volta.
+//
+// Foi assim que "Archivar" apareceu por fora do cartão em espanhol. Em
+// português os mesmos três botões cabiam por poucos pixels — ou seja, o
+// layout nunca esteve certo, estava passando raspando, e bastou trocar de
+// idioma para o defeito aparecer.
+//
+// A checagem é estática porque o sintoma é visual: não lança erro, não muda
+// número nenhum e some em tela estreita, onde o grid vira uma coluna só.
+secao('15b. Fileiras de botões usam .btn-row (que quebra linha)');
+{
+  const jsx = [];
+  (function varrer(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (['node_modules', '.next', 'api'].includes(e.name)) continue;
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) varrer(f);
+      else if (f.endsWith('.js')) jsx.push(f);
+    }
+  })(path.join(ROOT, 'app'));
+  (function varrer(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) varrer(f); else if (f.endsWith('.js')) jsx.push(f);
+    }
+  })(path.join(ROOT, 'components'));
+
+  /** Do fim da tag de abertura até o </div> que a fecha, contando aninhamento. */
+  const conteudoDaDiv = (src, desde) => {
+    let nivel = 1, i = desde;
+    while (i < src.length && nivel > 0) {
+      const abre = src.indexOf('<div', i);
+      const fecha = src.indexOf('</div>', i);
+      if (fecha === -1) return src.slice(desde);
+      if (abre !== -1 && abre < fecha) { nivel++; i = abre + 4; }
+      else { nivel--; if (nivel === 0) return src.slice(desde, fecha); i = fecha + 6; }
+    }
+    return src.slice(desde);
+  };
+
+  const suspeitas = [];
+  for (const f of jsx) {
+    const src = fs.readFileSync(f, 'utf8');
+    // <div style={{ … display: 'flex' … }}> que contenha algum .hbtn
+    for (const m of src.matchAll(/<div style=\{\{([^}]*display: 'flex'[^}]*)\}\}>/g)) {
+      const estilo = m[1];
+      if (/flexWrap/.test(estilo)) continue;
+      const corpo = conteudoDaDiv(src, m.index + m[0].length);
+      if (!/className="hbtn/.test(corpo)) continue;
+      const linha = src.slice(0, m.index).split('\n').length;
+      suspeitas.push(`${path.relative(ROOT, f)}:${linha} — fileira de .hbtn sem quebra (use .btn-row)`);
+    }
+  }
+  ok(suspeitas.length === 0,
+    'nenhuma fileira de .hbtn com display:flex inline e sem flexWrap',
+    suspeitas);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // 16. O banco de produção não foi tocado
 // ═══════════════════════════════════════════════════════════════════════════
 secao('16. data/fluxo.db intacto');
