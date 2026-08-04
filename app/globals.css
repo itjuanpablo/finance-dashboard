@@ -106,6 +106,10 @@ header {
 
 /* ── Main grid ──────────────────────────── */
 .grid { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+/* Item de grade nasce com `min-width: auto` — "não fico menor que meu
+   conteúdo". Basta um filho largo para a trilha `1fr` crescer além do
+   container e levar a página junto. `min-width: 0` devolve a decisão à grade. */
+.grid > *, .left-col > *, .cards > *, .insights-row > * { min-width: 0; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 .panel {
   background: var(--surface); border: 1px solid var(--border);
@@ -153,6 +157,16 @@ svg .seg.dim { opacity: .25; }
 select.control {
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
   border-radius: 10px; padding: 8px 10px; font-size: 13px; font-family: inherit; cursor: pointer; outline: 0;
+  /* ─────────────────────────────────────────────────────────────────────────
+     A largura natural de um <select> é a da OPÇÃO MAIS LONGA — e o filtro de
+     categorias contém todas as categorias, inclusive as que a pessoa criou.
+     Sem trava, ele se recusa a encolher (item de flex nasce com
+     `min-width: auto`), estoura o painel, e no Safari do iPhone isso ALARGA O
+     VIEWPORT DE LAYOUT: todo painel da página passa a renderizar mais largo
+     que a tela e aparece cortado. Um <select> derrubava o app inteiro.
+     Com a trava, o próprio select trunca o texto da opção — que é o
+     comportamento nativo e o custo certo a pagar. */
+  max-width: 100%; min-width: 0;
 }
 table { width: 100%; border-collapse: collapse; }
 thead th {
@@ -329,16 +343,77 @@ tbody tr:hover { background: var(--surface-2); }
 .side-item:hover { background: var(--surface-2); color: var(--text); }
 .side-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .manage-content { flex: 1; min-width: 0; }
+.side-ico { flex-shrink: 0; }
+.side-label { min-width: 0; }
+.side-badge { margin-left: auto; font-size: 11.5px; flex-shrink: 0; }
+
+/* ── Administrar no celular: menu e seção, como nos Ajustes do telefone ──────
+   Antes as seis seções eram uma fileira que rolava de lado. Rolagem horizontal
+   não tem aviso: cabiam três, e as outras três simplesmente não existiam para
+   quem não soubesse arrastar. "Como é que a pessoa vai saber que tem mais?" —
+   não vai, e essa é a resposta honesta.
+
+   Agora: sem seção escolhida, a tela É a lista das seis. Escolhida uma, ela
+   ocupa a tela inteira com um "← Administrar" em cima.
+
+   Quem alterna os dois é o CSS, a partir de uma classe que o React põe no
+   layout. Nada de medir a largura da janela em JavaScript para decidir o que
+   renderizar: o servidor não conhece o tamanho do aparelho, e a diferença
+   apareceria como mismatch de hidratação — texto trocado na tela, não erro. */
 @media (max-width: 800px) {
-  .manage-layout { flex-direction: column; }
-  .manage-side { width: 100%; position: static; flex-direction: row; overflow-x: auto; }
-  /* `overflow-x: auto` só serve se os itens SE RECUSAREM a caber. Sem isto eles
-     têm flex-shrink: 1 (o padrão), então em vez de a fileira rolar, cada item
-     era espremido e o rótulo quebrava em duas linhas — "Facturas y servicios"
-     virava duas, "Cuentas y tarjetas" também. A rolagem existia no CSS e nunca
-     acontecia. */
-  .manage-side .side-item { flex-shrink: 0; white-space: nowrap; }
+  /* `align-items: stretch` NÃO é redundante — é o conserto.
+     ─────────────────────────────────────────────────────────────────────────
+     A regra base tem `align-items: start`, posta para o desktop: ali o flex é
+     em LINHA, e o eixo transversal é a ALTURA — serve para a coluna lateral
+     não esticar até o fim do conteúdo.
+
+     Ao virar `column` no celular, a mesma propriedade passa a governar a
+     LARGURA. E `start` em largura significa "cada item ocupa a largura do seu
+     conteúdo", não a do container. O conteúdo aqui é a tabela de lançamentos:
+     ela ditava a largura do painel, o painel esticava além da tela, e os
+     filtros — que dividem 50% desse painel — saíam cortados.
+
+     `min-width: 0` no `.manage-content` não ajudava: o item não estava sendo
+     espremido, estava sendo medido pelo conteúdo.
+
+     Foi o defeito que sobreviveu a três rodadas de correção porque só aparece
+     DENTRO de uma seção. Na tela de menu o conteúdo está com `display: none`,
+     então a medição no navegador vinha limpa. */
+  .manage-layout { flex-direction: column; align-items: stretch; }
+  .manage-side {
+    width: 100%; position: static;
+    flex-direction: column; gap: 8px; overflow: visible;
+  }
+
+  .manage-side .side-item {
+    width: 100%; min-height: 54px; padding: 14px;
+    gap: 12px; font-size: 15px; white-space: normal;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--text);
+  }
+  .side-ico { font-size: 19px; }
+  /* A seta é o que diz "isto leva a algum lugar" — sem ela, uma lista de
+     rótulos parece um grupo de botões que já fazem alguma coisa aqui mesmo. */
+  .manage-side .side-item::after {
+    content: '›'; margin-left: auto; color: var(--muted);
+    font-size: 22px; line-height: 1; flex-shrink: 0;
+  }
+  .manage-side .side-item .side-badge { margin-left: 0; }
+
+  /* Na lista, nada está "ativo": a pessoa ainda não escolheu. O destaque de
+     seção corrente é conceito do desktop, onde as duas colunas convivem. */
+  .manage-layout.sem-secao .side-item.active {
+    background: var(--surface); color: var(--text); font-weight: 400;
+  }
+
+  .manage-layout.sem-secao .manage-content { display: none; }
+  .manage-layout.com-secao .manage-side { display: none; }
 }
+
+/* Par do .desk-only. Só existe abaixo de 800px, que é onde a coluna lateral
+   vira tela cheia e passa a fazer sentido "voltar". */
+.mob-only { display: none !important; }
+@media (max-width: 800px) { .mob-only { display: inline-flex !important; } }
 .inline-edit {
   background: var(--surface-2); border: 1px solid var(--accent);
   border-radius: 8px; padding: 4px 8px; font-size: 13px; font-family: inherit;
@@ -403,6 +478,9 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 .acc-form input, .acc-form select {
   background: var(--surface); border: 1px solid var(--border); color: var(--text);
   border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit; outline: 0;
+  /* mesma razão do select.control: nome de banco ou de categoria longo não
+     pode ditar a largura do formulário */
+  max-width: 100%; min-width: 0;
 }
 .src-check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
 .ghost-add {
@@ -523,6 +601,32 @@ tbody tr td { transition: background .12s; }
 .bottom-nav { display: none; }
 
 /* ── Mobile (celular / PWA) ─────────────── */
+
+/* Trava do viewport, na raiz — proteção contra a AMPLIFICAÇÃO, não contra a
+   causa.
+   ─────────────────────────────────────────────────────────────────────────
+   A causa foi encontrada e corrigida: um `<select>` sem `max-width`, cuja
+   largura natural é a da opção mais longa. Medido depois: nada mais passa da
+   largura da tela, nem com esta regra desligada.
+
+   Ela fica porque o Safari do iPhone reage a transbordo ALARGANDO o viewport
+   de layout — e aí `100%` passa a valer o número errado e a tela INTEIRA sai
+   cortada. O sintoma é desproporcional à falha: um elemento errado faz o app
+   parecer quebrado. Nenhum navegador de desktop reproduz isso, então é
+   justamente o caso que os nossos testes não pegam.
+
+   `overflow-x: hidden` e NÃO `max-width: 100%`. A primeira versão tinha os
+   dois, e o `max-width` restringia o LAYOUT: com ele, `scrollWidth` e
+   `getBoundingClientRect()` passavam a mentir que estava tudo certo, e a
+   medição que encontraria o próximo culpado vinha limpa. Contenção pode
+   esconder o estrago; não pode cegar o diagnóstico.
+
+   Fica no `html`, não no `body`: no `body` quebraria o `position: sticky` da
+   barra de seleção em massa. */
+@media (max-width: 900px) {
+  html { overflow-x: hidden; }
+}
+
 @media (max-width: 640px) {
   .container { padding: 0 12px 104px; }
   header { gap: 8px; padding: 12px 0; margin-bottom: 16px; }
@@ -570,6 +674,15 @@ tbody tr td { transition: background .12s; }
   .panel-body { padding: 12px 14px 16px; }
   .legend { padding: 8px 12px 14px; }
   .filters { padding: 10px 12px; gap: 8px; }
+  /* Cada controle ocupa metade da linha e quebra quando não cabe, em vez de
+     empurrar. `min-width: 0` é o que autoriza encolher; sem ele o flex-basis
+     não vale nada. */
+  /* `calc(50% - 4px)` e não `140px`: com base fixa, um container mais largo do
+     que devia cabe TRÊS por linha e a terceira sai da tela. Com base
+     percentual, são duas por linha em qualquer largura — a linha fica
+     coerente mesmo quando o container está errado. */
+  .filters .control { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .filters .search { flex: 1 1 100%; min-width: 0; }
   thead th { padding: 10px 10px; }
   tbody td { padding: 10px 10px; font-size: 13px; }
   .desc small { display: none; }

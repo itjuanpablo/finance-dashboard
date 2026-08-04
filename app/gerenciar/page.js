@@ -59,7 +59,17 @@ function EditableCell({ value, display, onSave, width }) {
 }
 
 export default function Gerenciar() {
-  const [tab, setTab] = useState('lancamentos');
+  // `null` = nenhuma seção escolhida.
+  //
+  // No CELULAR esse estado é uma tela: a lista das seções, como os Ajustes do
+  // iPhone. No DESKTOP ele não existe visualmente — a coluna lateral e o
+  // conteúdo convivem, e `null` só significa "mostre a primeira".
+  //
+  // Quem decide qual dos dois mundos aparece é o CSS, não JavaScript medindo a
+  // tela. Medir largura no cliente para escolher o que renderizar produz
+  // mismatch de hidratação: o servidor não sabe o tamanho do aparelho.
+  const [tab, setTab] = useState(null);
+  const secao = tab ?? 'lancamentos';   // o que o conteúdo mostra
   const [txs, setTxs] = useState(null);
   const [colors, setColors] = useState({});
   const [cats, setCats] = useState([]);
@@ -93,16 +103,34 @@ export default function Gerenciar() {
   }
 
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get('tab');
-    if (p && TABS.some(([k]) => k === p)) setTab(p);
+    // A URL é a fonte da verdade da navegação, inclusive quando quem mudou foi
+    // o botão de voltar do navegador (ou o gesto de deslizar, no iPhone).
+    const daUrl = () => {
+      const p = new URLSearchParams(window.location.search).get('tab');
+      setTab(p && TABS.some(([k]) => k === p) ? p : null);
+    };
+    daUrl();
+    window.addEventListener('popstate', daUrl);
     loadAll();
+    return () => window.removeEventListener('popstate', daUrl);
   }, []);
 
+  // `pushState`, não `replaceState`: no celular a pessoa entra numa seção e o
+  // reflexo é deslizar de volta. Sem entrada no histórico, esse gesto jogava
+  // para fora de Administrar inteiro — a tela dizia "estou dentro de Regras" e
+  // o telefone discordava.
   const switchTab = k => {
     setTab(k);
     const url = new URL(window.location);
     url.searchParams.set('tab', k);
-    window.history.replaceState(null, '', url);
+    window.history.pushState(null, '', url);
+  };
+
+  const voltarAoMenu = () => {
+    setTab(null);
+    const url = new URL(window.location);
+    url.searchParams.delete('tab');
+    window.history.pushState(null, '', url);
   };
 
   if (!txs) return <div className="container"><div className="loading">{t('common.loading')}</div></div>;
@@ -121,33 +149,39 @@ export default function Gerenciar() {
         <AcoesCabecalho pin />
       </header>
 
-      <div className="manage-layout">
+      <div className={`manage-layout ${tab ? 'com-secao' : 'sem-secao'}`}>
         <nav className="manage-side">
           {TABS.map(([k, ico, labelKey]) => (
-            <button key={k} className={`side-item ${tab === k ? 'active' : ''}`}
+            <button key={k} className={`side-item ${secao === k ? 'active' : ''}`}
               onClick={() => switchTab(k)}>
-              <span>{ico}</span>{t(labelKey)}
-              {k === 'regras' && rules.length > 0 && <span style={{ marginLeft: 'auto', fontSize: 11.5 }}>{rules.length}</span>}
+              <span className="side-ico">{ico}</span>
+              <span className="side-label">{t(labelKey)}</span>
+              {k === 'regras' && rules.length > 0 && <span className="side-badge">{rules.length}</span>}
             </button>
           ))}
         </nav>
 
         <div className="manage-content">
-          {tab === 'lancamentos' && (
+          {/* Só no celular: no desktop a coluna lateral nunca sai da tela, então
+              não há de onde "voltar". */}
+          <button className="hbtn mob-only" onClick={voltarAoMenu}
+            style={{ marginBottom: 12 }}>← {t('nav.manage')}</button>
+
+          {secao === 'lancamentos' && (
             <Lancamentos txs={txs} colors={colors} activeCats={activeCats} labelOf={labelOf}
               accounts={accounts} toast={toast} reload={loadAll} />
           )}
-          {tab === 'categorias' && (
+          {secao === 'categorias' && (
             <Categorias cats={cats} toast={toast} reload={loadAll} />
           )}
-          {tab === 'contas' && (
+          {secao === 'contas' && (
             <Contas accounts={accounts} cards={cards} knownSources={knownSources}
               toast={toast} reload={loadAll} />
           )}
-          {tab === 'apagar' && (
+          {secao === 'apagar' && (
             <ContasAPagar cats={cats} toast={toast} />
           )}
-          {tab === 'regras' && (
+          {secao === 'regras' && (
             <div className="panel">
               <div className="panel-head" style={{ paddingBottom: 12 }}>
                 <div>
@@ -183,7 +217,7 @@ export default function Gerenciar() {
               </div>
             </div>
           )}
-          {tab === 'importacoes' && (
+          {secao === 'importacoes' && (
             <div className="panel">
               <div className="panel-head" style={{ paddingBottom: 12 }}>
                 <div>

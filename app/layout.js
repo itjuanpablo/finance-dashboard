@@ -45,6 +45,12 @@ export async function generateMetadata() {
     title: t('app.title'),
     description: t('app.description'),
     appleWebApp: { capable: true, title: t('app.name'), statusBarStyle: 'black-translucent' },
+    // O `appleWebApp` acima gera `apple-mobile-web-app-capable`, que os
+    // navegadores marcaram como obsoleto — o aviso aparece no console a cada
+    // carga. O substituto padronizado é `mobile-web-app-capable`, e os dois
+    // convivem: o iOS antigo ainda lê o da Apple, o resto lê o novo. Tirar o
+    // antigo quebraria "Adicionar à Tela de Início" em iPhone mais velho.
+    other: { 'mobile-web-app-capable': 'yes' },
   };
 }
 
