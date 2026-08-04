@@ -87,7 +87,7 @@ echo "   — inclusive o de um café — alcançava suas finanças sem senha nen
 echo ""
 echo "📱 Para abrir no celular, publique pelo Tailscale em vez de expor a porta:"
 echo ""
-echo "     tailscale serve --bg http://$HOST:$PORT"
+echo "     bash scripts/publicar-tailscale.sh"
 echo ""
 echo "   Depois abra https://<seu-mac>.<sua-tailnet>.ts.net no celular."
 echo "   Por que é melhor: a porta continua fechada para a rede local, o tráfego"

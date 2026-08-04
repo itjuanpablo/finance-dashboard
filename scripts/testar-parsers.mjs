@@ -10,7 +10,7 @@
 
 import {
   parseCsv, parseCsvFile, parseDate, parseAmountCents,
-  sniffSep, sniffDecimal, sniffDateOrder, splitLine,
+  sniffSep, sniffDecimal, sniffDateOrder, splitLine, conferirCadeiaSaldo,
 } from '../lib/parsers/csv.js';
 import { parseOfx, parseOfxFile } from '../lib/parsers/ofx.js';
 import { decodeBuffer, countMojibake, undoMojibake } from '../lib/parsers/encoding.js';
@@ -1128,6 +1128,71 @@ ok('resumen AR: sem data de fechamento não inventa ano', !!semCiclo,
 // senão a tela diz "origem desconhecida" para algo que foi lido com precisão.
 eq('resumen AR: perfil de banco casa',
   detectBank(RESUMEN_AR, 'resumen.pdf', 'pdf')?.id, 'mp-ar-resumen');
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Cadeia de saldos em CSV
+// ═════════════════════════════════════════════════════════════════════════════
+section('CSV: cadeia de saldos');
+
+// Do mais ANTIGO para o mais novo: saldo[i] = saldo[i-1] + valor[i]
+const CSV_SALDO_ASC = [
+  'data;descricao;valor;saldo',
+  '01/03/2026;SALARIO;3000,00;3000,00',
+  '02/03/2026;MERCADO;-250,00;2750,00',
+  '03/03/2026;FARMACIA;-50,00;2700,00',
+].join('\n');
+
+// Mesmo extrato, do mais NOVO para o mais antigo — banco também faz assim.
+const CSV_SALDO_DESC = [
+  'data;descricao;valor;saldo',
+  '03/03/2026;FARMACIA;-50,00;2700,00',
+  '02/03/2026;MERCADO;-250,00;2750,00',
+  '01/03/2026;SALARIO;3000,00;3000,00',
+].join('\n');
+
+const asc = parseCsvFile(CSV_SALDO_ASC);
+const dsc = parseCsvFile(CSV_SALDO_DESC);
+
+eq('CSV asc: 3 lançamentos', asc.transactions.length, 3);
+ok('CSV asc: cadeia fecha, nenhum aviso',
+  asc.warnings.length === 0, JSON.stringify(asc.warnings));
+ok('CSV desc: a direção é descoberta, não presumida',
+  dsc.warnings.length === 0, JSON.stringify(dsc.warnings));
+
+// O saldo serviu para conferir e não vira dado de transação: se vazasse para o
+// banco, entraria no hash de deduplicação e mudaria a identidade da linha.
+ok('CSV: saldo não vaza para a transação',
+  asc.transactions.every(t => !('balance' in t)),
+  JSON.stringify(asc.transactions[0]));
+
+// O que a soma de totais NÃO pega: sinal invertido numa linha só. O total muda,
+// mas nada no arquivo declara o total — só o saldo denuncia.
+const CSV_SINAL = CSV_SALDO_ASC.replace('MERCADO;-250,00', 'MERCADO;250,00');
+const sinal = parseCsvFile(CSV_SINAL);
+ok('CSV: sinal invertido é pego pela cadeia',
+  sinal.warnings.some(w => /MERCADO/.test(w)), JSON.stringify(sinal.warnings));
+
+// Valor certo, saldo adulterado: prova que a checagem olha os dois lados.
+const CSV_QUEBRADO = CSV_SALDO_ASC.replace('2750,00', '2999,99');
+const quebrado = parseCsvFile(CSV_QUEBRADO);
+ok('CSV: elo quebrado vira aviso', quebrado.warnings.length > 0);
+ok('CSV: o aviso nomeia a linha e os dois números',
+  quebrado.warnings.some(w => /MERCADO/.test(w) && /2750/.test(w) && /2999/.test(w)),
+  JSON.stringify(quebrado.warnings));
+
+// Diferente do OFX e do extrato argentino, aqui NÃO aborta: export filtrado
+// quebra a cadeia sem que a leitura esteja errada.
+eq('CSV: mesmo com a cadeia quebrada, importa', quebrado.transactions.length, 3);
+
+// Sem coluna de saldo não há o que conferir — e isso não é motivo de aviso.
+const semSaldo = parseCsvFile([
+  'data;descricao;valor',
+  '01/03/2026;SALARIO;3000,00',
+  '02/03/2026;MERCADO;-250,00',
+].join('\n'));
+eq('CSV sem saldo: nenhum aviso', semSaldo.warnings.length, 0);
+eq('CSV sem saldo: conferirCadeiaSaldo devolve null',
+  conferirCadeiaSaldo([{ balance: null, amount: 1 }, { balance: null, amount: 2 }]), null);
 
 // ─── resultado ───────────────────────────────────────────────────────────────
 console.log(`  \x1b[32m${pass - mark} ok\x1b[0m`);
