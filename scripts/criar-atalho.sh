@@ -22,7 +22,10 @@
 # corromperia a execução no meio. Fora da pasta, isso não acontece.
 set -euo pipefail
 
-REPO="itjuanpablo/finance-dashboard"
+# O GitHub redireciona o nome antigo (finance-dashboard) para sempre, e o
+# `curl -L` mais abaixo segue o redirecionamento — então uma instalação antiga
+# continua se atualizando mesmo apontando para o nome anterior.
+REPO="itjuanpablo/fluxo"
 APP_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ATALHO="$HOME/Desktop/Fluxo.command"
 
@@ -105,7 +108,8 @@ atualizar() {
   # ACHA a pasta que contém o package.json em vez de PRESUMIR o nível.
   #
   # O pacote do GitHub vem dentro de uma pasta com hash no nome
-  # (itjuanpablo-finance-dashboard-a1b2c3d/), e o caminho óbvio seria
+  # (itjuanpablo-fluxo-a1b2c3d/ — e o nome muda se o repo for renomeado), e o
+  # caminho óbvio seria
   # `--strip-components=1`. Só que, se o número de níveis mudar, o conteúdo é
   # despejado numa subpasta, nada é atualizado — e o script diria "pronto" do
   # mesmo jeito. Atualização que finge ter funcionado é pior que erro.

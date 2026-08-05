@@ -86,7 +86,7 @@ Comandos úteis: `bash scripts/atualizar.sh` (após mudar o código) e `bash scr
 
 **Importação e dados**
 
-- PDF do Mercado Pago (extrato de conta e fatura de cartão), com parsers validados ao centavo contra os totais declarados nos documentos; OFX e CSV de qualquer banco.
+- **OFX e CSV de qualquer banco**, e PDF dos layouts já mapeados — Nubank (extrato), Inter (Conta Global, em dólar), Mercado Pago (extrato e fatura, BR e AR) e contas argentinas. Todo parser de PDF é validado ao centavo contra os totais que o próprio documento declara.
 - **Perfis de banco** (`lib/banks/`): registry declarativo que reconhece o layout do arquivo pelo cabeçalho — Nubank, Itaú, Bradesco, Banco do Brasil, Inter, C6 no Brasil; Mercado Pago AR, Galicia, Santander, BBVA, Brubank, Ualá, Naranja X na Argentina. Cada perfil declara seu grau de confiança; o que não é reconhecido cai no parser genérico em vez de errar calado. Ver [`lib/banks/README.md`](lib/banks/README.md).
 - Deduplicação: reimportar o mesmo arquivo ou períodos sobrepostos não duplica nada (ID de operação do banco no extrato, hash de conteúdo no resto).
 - Desfazer importação: cada arquivo vira um lote que pode ser revertido em um clique (menu **Importações**).
@@ -160,7 +160,7 @@ Copie o arquivo `data/fluxo.db`. Isso é tudo.
 ## Histórico
 
 Veja as notas das versões em:
-[Releases - Fluxo](https://github.com/itjuanpablo/finance-dashboard/releases)
+[Releases - Fluxo](https://github.com/itjuanpablo/fluxo/releases)
 
 ## Licença
 

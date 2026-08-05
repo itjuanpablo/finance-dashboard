@@ -18,13 +18,26 @@ export async function GET() {
   const cats = categoryRows(db, { includeArchived: true });
 
   // Estatísticas agregadas por CHAVE — é o que transactions.category guarda.
+  //
+  // CONTAGEM e DINHEIRO respondem a perguntas diferentes, e por isso filtram
+  // diferente:
+  //
+  //   n      — quantas transações usam esta categoria. Conta TODAS as moedas:
+  //            uma categoria só com compras em dólar apareceria com 0 se
+  //            filtrasse por moeda, e mesmo assim a exclusão dela exigiria um
+  //            destino (o guarda do DELETE conta tudo). Dois números
+  //            discordando na mesma tela é pior que um número amplo.
+  //   spent  — soma de dinheiro, então SÓ na moeda da instalação. Somar dólar
+  //            com real exigiria uma cotação que este projeto não inventa.
+  //   months — meses que entram na média; tem de ser os mesmos meses de `spent`.
   const stats = {};
   db.prepare(`
     SELECT category,
            COUNT(*) AS n,
-           SUM(CASE WHEN amount_cents < 0 AND transfer = 0 THEN -amount_cents ELSE 0 END) AS spent,
-           COUNT(DISTINCT substr(date, 1, 7)) AS months
-    FROM transactions WHERE ${ACTIVE_TX} AND ${BASE_CURRENCY} GROUP BY category
+           SUM(CASE WHEN ${BASE_CURRENCY} AND amount_cents < 0 AND transfer = 0
+                    THEN -amount_cents ELSE 0 END) AS spent,
+           COUNT(DISTINCT CASE WHEN ${BASE_CURRENCY} THEN substr(date, 1, 7) END) AS months
+    FROM transactions WHERE ${ACTIVE_TX} GROUP BY category
   `).all().forEach(r => { stats[r.category] = r; });
   db.prepare('SELECT category, COUNT(*) AS rules FROM rules GROUP BY category')
     .all().forEach(r => { (stats[r.category] = stats[r.category] || {}).rules = r.rules; });
