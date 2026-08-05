@@ -10,7 +10,7 @@ import { t, tn, makeCatLabeler } from '@/lib/i18n';
 import { CAT, NON_BUDGET_CATEGORIES } from '@/lib/categories';
 import { stripInstallment as stripParcela, installmentOf } from '@/lib/parsers/labels';
 import {
-  fmtMoney, fmtDayMonth, fmtMonthLong, fmtMonthShort,
+  fmtMoney, fmtMoneyIn, fmtDayMonth, fmtMonthLong, fmtMonthShort,
   currencySymbol, parseAmountToCents,
 } from '@/lib/format';
 
@@ -291,7 +291,11 @@ export default function Dashboard() {
   }, [txs, month]);
 
   const summary = useMemo(() => {
-    const real = monthTxs.filter(tx => !tx.transfer);
+    // `currency == null` é a moeda da instalação. Os cartões de resumo, a
+    // projeção e o orçamento falam SÓ dessa moeda — ver BASE_CURRENCY em
+    // lib/db.js. Dólar não entra aqui: entra no bloco `outrasMoedas`, com o
+    // próprio símbolo, sem conversão nenhuma.
+    const real = monthTxs.filter(tx => !tx.transfer && tx.currency == null);
     const totIn = real.filter(tx => tx.amount_cents > 0).reduce((s, tx) => s + tx.amount_cents, 0);
     const totOut = real.filter(tx => tx.amount_cents < 0).reduce((s, tx) => s - tx.amount_cents, 0);
     const now = new Date();
@@ -305,9 +309,29 @@ export default function Dashboard() {
     };
   }, [monthTxs, month]);
 
+  /**
+   * Totais das moedas ESTRANGEIRAS, uma linha por moeda.
+   *
+   * Nunca somados com os de cima e nunca convertidos: o extrato da conta em
+   * dólar não traz cotação, e aplicar a de hoje a um gasto de julho produz um
+   * número que não corresponde a nada. Dois totais lado a lado dizem a verdade;
+   * um total só exigiria inventar a taxa.
+   */
+  const outrasMoedas = useMemo(() => {
+    const porMoeda = new Map();
+    for (const tx of monthTxs) {
+      if (tx.transfer || tx.currency == null) continue;
+      const m = porMoeda.get(tx.currency) ?? { moeda: tx.currency, entrada: 0, saida: 0, n: 0 };
+      tx.amount_cents > 0 ? (m.entrada += tx.amount_cents) : (m.saida -= tx.amount_cents);
+      m.n++;
+      porMoeda.set(tx.currency, m);
+    }
+    return [...porMoeda.values()].sort((a, b) => a.moeda.localeCompare(b.moeda));
+  }, [monthTxs]);
+
   const donut = useMemo(() => {
     const spent = {};
-    monthTxs.filter(tx => tx.amount_cents < 0 && !tx.transfer)
+    monthTxs.filter(tx => tx.amount_cents < 0 && !tx.transfer && tx.currency == null)
       .forEach(tx => { spent[tx.category] = (spent[tx.category] || 0) - tx.amount_cents; });
     const entries = Object.entries(spent).sort((a, b) => b[1] - a[1]);
     const total = entries.reduce((s, [, v]) => s + v, 0);
@@ -533,6 +557,17 @@ export default function Dashboard() {
           <div className="card-label"><span className="dot" style={{ background: 'var(--accent)' }} />{t('dash.balance')}</div>
           <div className={`card-value ${summary.bal >= 0 ? 'pos' : 'neg'}`}>{fmtMoney(summary.bal)}</div>
           <div className="card-sub">{t('dash.balanceSub')}</div>
+          {/* Moeda estrangeira aparece SEPARADA, embaixo do saldo, com o próprio
+              símbolo. Não é somada nem convertida: o extrato da conta em dólar
+              não traz cotação, e aplicar a de hoje a um gasto de julho daria um
+              número que nunca existiu. Dois números dizem a verdade; um só
+              exigiria inventar a taxa. */}
+          {outrasMoedas.map(m => (
+            <div key={m.moeda} className="card-sub" style={{ marginTop: 6, color: 'var(--text)' }}>
+              <b>{fmtMoneyIn(m.entrada - m.saida, m.moeda)}</b>{' '}
+              <span style={{ color: 'var(--muted)' }}>{t('dash.otherCurrency', { n: m.n })}</span>
+            </div>
+          ))}
         </div>
         <div className="card">
           <div className="card-label"><span className="dot" style={{ background: 'var(--amber)' }} />{t('dash.projection')}</div>

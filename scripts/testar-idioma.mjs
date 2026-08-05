@@ -36,6 +36,13 @@ const { resolveLocale, resolveCurrency, DEFAULT_LOCALE, localeFromAcceptLanguage
   await import(path.join(ROOT, 'lib/config.js'));
 const { setBrowserLocale } = await import(path.join(ROOT, 'lib/locale-state.js'));
 
+// Lido do próprio db.js: o teste da migração v7 fixava o número 7 e passou a
+// falhar na v8 sem que nada estivesse errado. Um teste que quebra a cada
+// esquema novo treina a pessoa a ignorá-lo.
+const SCHEMA_ATUAL = Number(
+  fs.readFileSync(path.join(ROOT, 'lib/db.js'), 'utf8')
+    .match(/const SCHEMA_VERSION = (\d+)/)[1]);
+
 let pass = 0;
 const fails = [];
 
@@ -178,7 +185,7 @@ sec('Migração v7 — instalação antiga volta a detectar');
   `);
   const m = JSON.parse(depoisDaMigracao);
   eq('semente de idioma foi removida', m.locale, null);
-  eq('esquema subiu para 7', m.versao, 7);
+  eq('esquema subiu para a versão atual', m.versao, SCHEMA_ATUAL);
 
   // passo 3: quem ESCOLHEU outro idioma não é tocado pela migração
   const dir2 = path.join(TMP, 'escolhida');

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getDb, ACTIVE_TX } from '@/lib/db';
+import { getDb, ACTIVE_TX, BASE_CURRENCY } from '@/lib/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -82,7 +82,7 @@ export async function GET(request) {
   const dias = db.prepare(`
     SELECT date, SUM(amount_cents) delta
     FROM transactions
-    WHERE ${ACTIVE_TX} AND transfer = 0 AND date >= ? ${filtroOrigem}
+    WHERE ${ACTIVE_TX} AND ${BASE_CURRENCY} AND transfer = 0 AND date >= ? ${filtroOrigem}
     GROUP BY date ORDER BY date
   `).all(desde, ...vinculadas);
 
@@ -110,7 +110,7 @@ export async function GET(request) {
            SUM(CASE WHEN amount_cents < 0 THEN -amount_cents ELSE 0 END) expense,
            COUNT(*) n
     FROM transactions
-    WHERE ${ACTIVE_TX} AND transfer = 0
+    WHERE ${ACTIVE_TX} AND ${BASE_CURRENCY} AND transfer = 0
     ${ano ? 'AND substr(date, 1, 4) = ?' : ''}
     GROUP BY ym ORDER BY ym
   `).all(...(ano ? [ano] : []));

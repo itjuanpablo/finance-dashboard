@@ -37,7 +37,7 @@ export async function GET(request) {
   //  · batch_id permite contar, ANTES de confirmar o desfazer, quantas linhas do
   //    lote têm edição manual — que o DELETE físico leva embora para sempre.
   const transactions = db.prepare(`
-    SELECT id, date, description, amount_cents, category, transfer, source, account_id,
+    SELECT id, date, description, amount_cents, category, transfer, source, account_id, currency,
            invoice_ref, batch_id,
            original_date, original_description, original_amount_cents
     FROM transactions WHERE ${ACTIVE_TX}

@@ -18,6 +18,8 @@ import { parseMercadoPagoPdf, parseExtrato, parseFatura } from '../lib/parsers/m
 import { detectBank, BANK_PROFILES } from '../lib/banks/index.js';
 import { parseExtractoAr, detectExtractoAr } from '../lib/parsers/extracto-ar.js';
 import { parseResumenTarjetaAr, detectResumenTarjetaAr, anoDoCiclo } from '../lib/parsers/resumen-tarjeta-ar.js';
+import { parseNubankExtrato, detectNubankExtrato } from '../lib/parsers/nubank-extrato.js';
+import { parseInterGlobalPdf, detectInterGlobalPdf } from '../lib/parsers/inter-global-pdf.js';
 import { categorize, KEYWORD_DICTS } from '../lib/categorizer.js';
 import { CAT } from '../lib/categories.js';
 import { t } from '../lib/i18n/index.js';
@@ -901,7 +903,27 @@ section('Registry de bancos');
 ok('todo perfil tem id, nome, país, formatos, source e confiança',
   BANK_PROFILES.every(p => p.id && p.name && p.country && p.formats?.length && p.source && p.confidence));
 ok('ids são únicos', new Set(BANK_PROFILES.map(p => p.id)).size === BANK_PROFILES.length);
-ok('sources são únicos', new Set(BANK_PROFILES.map(p => p.source)).size === BANK_PROFILES.length);
+// `source` NÃO é único, e a partir da v5 isso é de propósito: a mesma conta do
+// mundo real pode ser exportada em dois formatos. A Conta Global do Inter sai em
+// PDF e em CSV, e os dois perfis PRECISAM compartilhar o source — é ele que
+// vincula os lançamentos à conta e é ele que entra no hash de deduplicação. Com
+// sources diferentes, importar os dois formatos criaria duas contas e duplicaria
+// tudo.
+//
+// O que continua tendo de valer: quem compartilha source descreve a MESMA conta.
+{
+  const porSource = new Map();
+  for (const p of BANK_PROFILES) {
+    porSource.set(p.source, [...(porSource.get(p.source) ?? []), p]);
+  }
+  const divergentes = [...porSource.entries()]
+    .filter(([, ps]) => ps.length > 1)
+    .filter(([, ps]) => new Set(ps.map(p => `${p.name}|${p.kind}|${p.currency ?? ''}`)).size > 1)
+    .map(([src]) => src);
+  ok('perfis que compartilham source descrevem a mesma conta',
+    divergentes.length === 0,
+    divergentes.length ? `nome, tipo ou moeda divergem em: ${divergentes.join(', ')}` : '');
+}
 eq('source do Mercado Pago BR não mudou (source_bindings existentes)',
   BANK_PROFILES.filter(p => p.id.startsWith('mp-br')).map(p => p.source).sort(),
   ['mp-extrato', 'mp-fatura']);
@@ -1193,6 +1215,171 @@ const semSaldo = parseCsvFile([
 eq('CSV sem saldo: nenhum aviso', semSaldo.warnings.length, 0);
 eq('CSV sem saldo: conferirCadeiaSaldo devolve null',
   conferirCadeiaSaldo([{ balance: null, amount: 1 }, { balance: null, amount: 2 }]), null);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Extrato de conta do Nubank (PDF)
+// ═════════════════════════════════════════════════════════════════════════════
+section('Extrato Nubank');
+
+// Fixture SINTÉTICO. O extrato real traz CPF mascarado, agência, conta e nomes
+// de terceiros — nada disso entra no repositório.
+//
+// O que o fixture preserva, porque é o que quebra o parser:
+//   · o valor NÃO tem sinal: quem manda é o marcador do grupo;
+//   · as duas formas de linha misturadas — valor colado na descrição e valor
+//     sozinho depois de uma descrição de várias linhas;
+//   · o resumo do topo, cujos números parecem lançamentos.
+const NUBANK = [
+  'Fulano de Tal', 'VALORES EM R$',
+  'Saldo inicial', 'Rendimento líquido', 'Total de entradas', 'Total de saídas',
+  '0,00', '+0,00', '+500,00', '-500,00',
+  'Movimentações',
+  '10 JUL 2026',
+  'Total de entradas+ 500,00',
+  'Transferência recebida pelo PixNOME EXEMPLO - •••.000.000-•• - BANCO',
+  'EXEMPLO Agência: 1 Conta: 1234-5',
+  '500,00',
+  '12 JUL 2026',
+  'Total de saídas- 500,00',
+  'Pagamento de fatura300,00',
+  'Transferência enviada pelo PixOUTRO EXEMPLO - •••.111.111-••',
+  '200,00',
+  'Extrato gerado dia 04 de agosto de 2026 às 18:48',
+  '1 de 1',
+].join('\n') + '\nnubank.com.br';
+
+ok('Nubank: detectado', detectNubankExtrato(NUBANK));
+const nu = parseNubankExtrato(NUBANK);
+eq('Nubank: 3 lançamentos', nu.transactions.length, 3);
+
+// O resumo do topo tem números idênticos a lançamentos. Se entrasse, o total
+// dobraria — e continuaria "plausível".
+ok('Nubank: o resumo do topo não vira lançamento',
+  nu.transactions.every(t => t.date >= '2026-07-10'),
+  JSON.stringify(nu.transactions.map(t => t.date)));
+
+const entradas = nu.transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+const saidas = nu.transactions.filter(t => t.amount < 0).reduce((s, t) => s - t.amount, 0);
+eq('Nubank: entradas somam o que o grupo declara', entradas.toFixed(2), '500.00');
+eq('Nubank: saídas somam o que o grupo declara', saidas.toFixed(2), '500.00');
+
+// O caso que a primeira versão perdia: descrição e valor colados na linha.
+const colado = nu.transactions.find(t => /Pagamento de fatura/.test(t.description));
+ok('Nubank: lê o lançamento com valor colado na descrição', !!colado);
+eq('Nubank: e com o sinal do grupo', colado?.amount.toFixed(2), '-300.00');
+
+// O sinal é inferido: se o agrupamento for lido errado, metade do extrato
+// inverte. Por isso aqui ABORTA, e não avisa.
+let nuExplodiu = null;
+try { parseNubankExtrato(NUBANK.replace('Pagamento de fatura300,00', '')); }
+catch (e) { nuExplodiu = e.message; }
+ok('Nubank: lançamento perdido cancela a importação',
+  nuExplodiu && /2026-07-12/.test(nuExplodiu), nuExplodiu?.slice(0, 90));
+
+// Palavra e símbolo do marcador discordando = formato mudou. Adivinhar o sinal
+// num extrato é escolher entre receita e despesa no cara ou coroa.
+let nuSinal = null;
+try { parseNubankExtrato(NUBANK.replace('Total de saídas- 500,00', 'Total de saídas+ 500,00')); }
+catch (e) { nuSinal = e.message; }
+ok('Nubank: marcador contraditório cancela a importação', !!nuSinal);
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Conta Global do Inter (CSV em dólar)
+// ═════════════════════════════════════════════════════════════════════════════
+section('Inter Global (dólar)');
+
+const GLOBAL = [
+  'Extrato Global Account',
+  'Nome;NOME EXEMPLO',
+  'Account number;0000000000',
+  'Saldo Inicial Período Solicitado;$ 10,00',
+  'Saldo Final Período Solicitado;$ 25,00',
+  '',
+  'Data da Transação;Valor da Transação;Tipo da Operação;Tipo da Transação;Nome do Beneficiário;Estabelecimento',
+  '03/08/2026 10:44:03;US$ 5,00;Débito;Compra no Cartão Global;;LOJA EXEMPLO',
+  '01/08/2026 10:39:22;US$ 20,00;Crédito;Carregamento recebido;;',
+].join('\n');
+
+const ig = parseCsvFile(GLOBAL, { fileName: 'global.csv' });
+eq('Inter Global: perfil reconhecido', ig.profile?.id, 'inter-global-csv');
+eq('Inter Global: 2 lançamentos', ig.transactions.length, 2);
+
+// A moeda é o ponto todo: sem ela, 25 dólares viram 25 reais em silêncio.
+ok('Inter Global: cada lançamento sai marcado como USD',
+  ig.transactions.every(t => t.currency === 'USD'),
+  JSON.stringify(ig.transactions.map(t => t.currency)));
+
+// O sinal vem da coluna "Tipo da Operação" — o valor é sempre positivo.
+eq('Inter Global: Débito vira negativo',
+  ig.transactions.find(t => /LOJA/.test(t.description))?.amount.toFixed(2), '-5.00');
+eq('Inter Global: Crédito vira positivo',
+  ig.transactions.find(t => /Carregamento/.test(t.description))?.amount.toFixed(2), '20.00');
+
+// Metade das linhas tem "Estabelecimento" vazio. Sem reserva por linha elas
+// virariam "Sem descrição" — que não casa com regra nenhuma e cai em "a
+// revisar" todo mês, para sempre.
+eq('Inter Global: descrição cai no tipo quando não há estabelecimento',
+  ig.transactions.find(t => t.amount > 0)?.description, 'Carregamento recebido');
+
+eq('Inter Global: 10 + 15 = 25, fecha com o declarado', ig.warnings.length, 0);
+
+const igTorto = parseCsvFile(GLOBAL.replace(';$ 25,00', ';$ 99,00'), { fileName: 'global.csv' });
+ok('Inter Global: saldo final que não fecha vira aviso',
+  igTorto.warnings.some(w => /99|saldo/i.test(w)), JSON.stringify(igTorto.warnings));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Conta Global do Inter (PDF em dólar)
+// ═════════════════════════════════════════════════════════════════════════════
+section('Inter Global (PDF)');
+
+// Fixture SINTÉTICO — o extrato real traz nome e número de conta.
+// Cadeia: 10,00 → +20,00 = 30,00 (dia 1) → −5,00 = 25,00 (dia 3).
+const IG_PDF = [
+  'NOME EXEMPLO', 'Conta Cayman', 'Cartão Global',
+  'Saldo Inicial:$ 10,00',
+  'Saldo Final:$ 25,00',
+  '3 de agosto de 2026',
+  'Saldo do dia:$ 25,00Taxas mensais totais:$ 0,00',
+  'TransaçãoBeneficiário / RemetenteQuantia',
+  'Compra no Cartão GlobalLOJA EXEMPLO',
+  'Beneficiário',
+  '$ 5,00',
+  '1 de agosto de 2026',
+  'Saldo do dia:$ 30,00',
+  'TransaçãoBeneficiário / RemetenteQuantia',
+  'Carregamento recebidoNOME EXEMPLO',
+  'Remetente',
+  '$ 20,00',
+].join('\n');
+
+ok('Inter PDF: detectado', detectInterGlobalPdf(IG_PDF));
+const igp = parseInterGlobalPdf(IG_PDF);
+eq('Inter PDF: 2 lançamentos', igp.transactions.length, 2);
+ok('Inter PDF: em dólar', igp.transactions.every(t => t.currency === 'USD'));
+
+// O sinal vem do TIPO; a cadeia de saldos é quem confere.
+eq('Inter PDF: compra sai', igp.transactions[0].amount.toFixed(2), '-5.00');
+eq('Inter PDF: carregamento entra', igp.transactions[1].amount.toFixed(2), '20.00');
+
+// "Beneficiário" e "Remetente" NÃO indicam direção — aparecem nos dois casos.
+// Este teste existe para impedir que alguém "conserte" o parser usando eles.
+ok('Inter PDF: Beneficiário/Remetente não invertem nada',
+  igp.transactions[0].amount < 0 && igp.transactions[1].amount > 0);
+
+// A prova de que a conferência não é decorativa: um tipo classificado com o
+// sinal trocado tem de derrubar a importação inteira.
+let igQuebrou = null;
+try {
+  parseInterGlobalPdf(IG_PDF.replace('Carregamento recebidoNOME', 'Chip InternacionalNOME'));
+} catch (e) { igQuebrou = e.message; }
+ok('Inter PDF: sinal errado derruba a cadeia e cancela',
+  igQuebrou && /cadeia de saldos/i.test(igQuebrou), igQuebrou?.slice(0, 80));
+
+// Sem saldo inicial não há como conferir nada, e aí o sinal seria palpite puro.
+let igSemSaldo = null;
+try { parseInterGlobalPdf(IG_PDF.replace('Saldo Inicial:$ 10,00', '')); }
+catch (e) { igSemSaldo = e.message; }
+ok('Inter PDF: sem saldo inicial, recusa em vez de adivinhar', !!igSemSaldo);
 
 // ─── resultado ───────────────────────────────────────────────────────────────
 console.log(`  \x1b[32m${pass - mark} ok\x1b[0m`);

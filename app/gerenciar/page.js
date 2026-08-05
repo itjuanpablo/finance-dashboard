@@ -7,9 +7,10 @@ import DividirLancamento from '@/components/DividirLancamento';
 import AcoesCabecalho from '@/components/AcoesCabecalho';
 import { t, tn } from '@/lib/i18n';
 import { CAT } from '@/lib/categories';
+import { CURRENCIES } from '@/lib/config';
 import { stripInstallment } from '@/lib/parsers/labels';
 import {
-  fmtMoney, fmtDate, fmtMonthLong, currencySymbol, parseAmountToCents,
+  fmtMoney, fmtDate, fmtMonthLong, currencySymbol, currencyCode, fmtMoneyIn, parseAmountToCents,
 } from '@/lib/format';
 
 const PALETTE = ['#f97316', '#3b82f6', '#8b5cf6', '#ec4899', '#a855f7', '#06b6d4',
@@ -611,6 +612,9 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
     const body = {
       ...(editAcc !== 'new' && { id: editAcc }),
       name: draft.name, institution: draft.institution, kind: draft.kind,
+      // String vazia atravessa de propósito: no PATCH ela significa "voltar
+      // para a moeda da instalação". `undefined` significaria "não mexer".
+      currency: draft.currency ?? '',
       initial_cents: parseAmountToCents(draft.initial || '0') || 0,
       initial_date: draft.initial_date || '1970-01-01',
       sources: draft.sources || [],
@@ -672,7 +676,12 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                   <b>{a.name}</b>
                   <span style={{ color: 'var(--muted)', fontSize: 12 }}>{t(`manage.kind.${a.kind}`)}</span>
                 </div>
-                <div className="big">{fmtMoney(a.balance_cents)}</div>
+                {/* Na moeda da CONTA. `fmtMoney` usaria o símbolo da instalação e
+                    escreveria R$ em cima de um saldo em dólar — errado sem que
+                    nada no código parecesse errado. */}
+                <div className="big">
+                  {a.currency ? fmtMoneyIn(a.balance_cents, a.currency) : fmtMoney(a.balance_cents)}
+                </div>
                 <div style={{ color: 'var(--muted)', fontSize: 12 }}>
                   {a.institution}{a.sources.length ? ` · ${a.sources.join(', ')}` : ` · ${t('manage.noLinkedSource')}`}
                 </div>
@@ -681,6 +690,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                     setEditAcc(a.id); setEditCard(null);
                     setDraft({
                       name: a.name, institution: a.institution, kind: a.kind,
+                      currency: a.currency ?? '',
                       initial: (a.initial_cents / 100).toFixed(2).replace('.', ','),
                       initial_date: a.initial_date, sources: a.sources,
                     });
@@ -694,7 +704,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
             ))}
             <button className="ghost-add" onClick={() => {
               setEditAcc('new'); setEditCard(null);
-              setDraft({ name: '', institution: '', kind: 'corrente', initial: '0,00', initial_date: new Date().toISOString().slice(0, 10), sources: [] });
+              setDraft({ name: '', institution: '', kind: 'corrente', currency: '', initial: '0,00', initial_date: new Date().toISOString().slice(0, 10), sources: [] });
             }}>+ {t('manage.addAccount')}</button>
           </div>
           {editAcc && (
@@ -710,7 +720,17 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                   <option value="poupanca">{t('manage.kind.poupanca')}</option>
                 </select>
                 <span />
-                <input placeholder={t('manage.initialBalance', { symbol: currencySymbol() })} value={draft.initial ?? ''}
+                {/* Conta inteira em outra moeda — o caso da Conta Global do Inter.
+                    Vazio significa "a moeda da instalação", que é o normal. */}
+                <select value={draft.currency ?? ''}
+                  onChange={e => setDraft(x => ({ ...x, currency: e.target.value }))}>
+                  <option value="">{t('manage.accCurrencyDefault', { code: currencyCode() })}</option>
+                  {Object.keys(CURRENCIES).filter(c => c !== currencyCode())
+                    .map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input placeholder={t('manage.initialBalance', {
+                  symbol: draft.currency ? draft.currency : currencySymbol(),
+                })} value={draft.initial ?? ''}
                   onChange={e => setDraft(x => ({ ...x, initial: e.target.value }))} />
                 <input type="date" value={draft.initial_date ?? ''}
                   onChange={e => setDraft(x => ({ ...x, initial_date: e.target.value }))} />

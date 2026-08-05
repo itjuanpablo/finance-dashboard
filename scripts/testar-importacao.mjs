@@ -261,6 +261,68 @@ sec('Nenhuma query esqueceu de excluir o lançamento-pai');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+sec('Nenhuma soma cruza moeda');
+
+// Mesma varredura estática do bloco acima, pela mesma razão: um SUM(amount_cents)
+// que esqueça `BASE_CURRENCY` soma dólar com real e devolve um número plausível
+// — 86,69 dólares viram 86,69 reais e ninguém percebe. Não quebra, não avisa,
+// só mente.
+{
+  const suspeitas = [];
+  const varrer = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { varrer(p); continue; }
+      if (!e.name.endsWith('.js')) continue;
+      const src = fs.readFileSync(p, 'utf8');
+      // Só consultas que SOMAM. Listar sem o predicado é legítimo (a tela mostra
+      // as duas moedas); somar sem ele nunca é.
+      // `SUM\(\s*-?\s*amount_cents` era estreito demais: não pegava
+      // `SUM(CASE WHEN amount_cents < 0 …)`, que é como a soma por categoria é
+      // escrita. Aquela consulta ficou fora do teste desde o começo e passou
+      // verde o tempo todo — um teste que não cobre o caso é indistinguível de
+      // um teste que passa.
+      for (const m of src.matchAll(/SUM\([^)]*amount_cents[\s\S]{0,400}?(?=`|;)/g)) {
+        // Vale qualquer forma que RESTRINJA a moeda: o predicado compartilhado,
+        // um `currency = ?` explícito (saldo de conta em moeda estrangeira) ou
+        // um GROUP BY que separe as moedas no resultado. O que não vale é somar
+        // sem mencionar moeda nenhuma.
+        const restringe = /BASE_CURRENCY|FOREIGN_CURRENCY|currency\s*(=|IS)|GROUP BY[^`;]*currency/;
+        if (!restringe.test(m[0])) {
+          suspeitas.push(path.relative(ROOT, p));
+        }
+      }
+    }
+  };
+  for (const d of ['app', 'lib']) varrer(path.join(ROOT, d));
+  ok('nenhum SUM(amount_cents) sem o predicado de moeda',
+    suspeitas.length === 0,
+    suspeitas.length ? `somariam moedas diferentes: ${[...new Set(suspeitas)].join(', ')}` : '');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+sec('Dólar não entra no total de real');
+{
+  const antesReal = contar(
+    `SELECT COALESCE(SUM(amount_cents),0) n FROM transactions WHERE ${ACTIVE_TX} AND currency IS NULL`).n;
+
+  db.prepare(`INSERT INTO transactions
+      (date, description, amount_cents, category, transfer, source, hash, currency)
+    VALUES (?,?,?,?,0,?,?,?)`)
+    .run('2026-07-15', 'COMPRA EM DOLAR', -1000, 'to_review', 'inter-global', 'usd-teste-1', 'USD');
+
+  const depoisReal = contar(
+    `SELECT COALESCE(SUM(amount_cents),0) n FROM transactions WHERE ${ACTIVE_TX} AND currency IS NULL`).n;
+  eq('o total em moeda base não se mexe', depoisReal, antesReal);
+
+  const emDolar = contar(
+    `SELECT COALESCE(SUM(amount_cents),0) n FROM transactions WHERE ${ACTIVE_TX} AND currency = 'USD'`).n;
+  eq('e o dólar é contado à parte', emDolar, -1000);
+
+  db.prepare("DELETE FROM transactions WHERE hash = 'usd-teste-1'").run();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 sec('data/fluxo.db intacto');
 const depois = fs.existsSync(DB_REAL) ? fs.statSync(DB_REAL) : null;
 ok('o banco real não foi tocado',
