@@ -12,8 +12,16 @@
 # alguns KB a quem nunca vai abri-los é trocar a rede de segurança por
 # arrumação.
 #
+# Atenção ao padrão: `*` não atravessa barra, então `scripts/*.mjs` NÃO alcança
+# `scripts/testes/` — daí a linha própria para a pasta.
+#
+# E NÃO confira isto com `git check-attr`: ele responde "unspecified" para
+# padrão de diretório mesmo quando a regra está valendo. Quem diz a verdade é
+# `git archive HEAD | tar t`, que é o que o GitHub serve em /tarball/.
+#
 # Quem instala precisa dos .sh e do código do app. Não precisa de:
 scripts/*.mjs      export-ignore
+scripts/testes/    export-ignore
 scripts/empacotar-fluxo.sh export-ignore
 docs/              export-ignore
 .gitattributes     export-ignore
