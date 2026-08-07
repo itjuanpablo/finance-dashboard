@@ -36,6 +36,33 @@ export const dynamic = 'force-dynamic';
 const FONTE = 'https://api.frankfurter.dev/v1/latest';
 const CHAVE = 'fx_cache';
 
+// ─── A segunda fonte, e por que ela é segunda ────────────────────────────────
+// O BCE publica ~30 moedas e NÃO publica peso argentino — justo a que faz falta
+// aqui. Esta fonte cobre o resto, mas não tem a mesma natureza: o BCE divulga
+// uma taxa de referência oficial, uma vez por dia útil; esta é uma média de
+// mercado. Por isso ela complementa e não substitui — onde o BCE tem o número,
+// o número do BCE prevalece.
+//
+// As moedas abaixo saem daqui, e a tela avisa quando uma delas está em uso.
+const FONTE_EXTRA =
+  'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json';
+const EXTRAS = ['ARS'];
+
+// As moedas que o conversor oferece. A fonte devolve ~30 e a lista virava uma
+// rolagem de siglas que ninguém reconhece — IDR, ISK, MYR — para achar quatro
+// que importam. Lista curta é escolha de produto, não limitação técnica:
+// acrescentar uma linha aqui basta (e o `VERSAO_CACHE` abaixo cuida do resto).
+//
+// A ordem é a da tela, e é deliberada: primeiro as duas do usuário, depois as
+// que ele realmente usa, depois as grandes.
+const MOEDAS = ['BRL', 'USD', 'ARS', 'EUR', 'GBP', 'JPY', 'CHF', 'CNY', 'CAD', 'AUD'];
+
+// Cache guardado por versão. SEM isto, mudar a lista de moedas não teria efeito
+// nenhum para quem já tinha cotação salva: o app serviria a lista antiga até o
+// cache expirar, e o peso argentino simplesmente não apareceria — foi
+// exatamente o que aconteceu. Cache que não sabe de que época é mente calado.
+const VERSAO_CACHE = 2;
+
 // De quanto em quanto tempo vale tentar de novo. Menor que isto é bater no
 // servidor alheio à toa: a taxa só muda uma vez por dia útil.
 const VALIDADE_MS = 6 * 60 * 60 * 1000;
@@ -52,7 +79,8 @@ export async function GET() {
   const db = getDb();
   const cache = lerCache(db);
   const agora = Date.now();
-  const fresco = cache?.fetched_at && (agora - cache.fetched_at) < VALIDADE_MS;
+  const fresco = cache?.v === VERSAO_CACHE
+    && cache?.fetched_at && (agora - cache.fetched_at) < VALIDADE_MS;
 
   if (fresco) {
     return NextResponse.json({ ...cache, stale: false, offline: false });
@@ -70,10 +98,47 @@ export async function GET() {
     // qualquer par por regra de três, sem uma requisição por par.
     if (!dados?.rates?.USD || !dados?.date) throw new Error('resposta inesperada');
 
+    const rates = { ...dados.rates, [dados.base || 'EUR']: 1 };
+
+    // Moedas que o BCE não publica. Falha aqui NÃO derruba a cotação principal:
+    // é melhor um conversor com 30 moedas que um conversor nenhum.
+    let extra = [];
+    let extraDate = null;
+    try {
+      const r2 = await fetch(FONTE_EXTRA, { cache: 'no-store' });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        const porDolar = d2?.usd;
+        for (const cod of EXTRAS) {
+          const v = porDolar?.[cod.toLowerCase()];
+          // A fonte extra dá "quanto vale 1 USD"; a base aqui é EUR. Converter
+          // pela ponte USD do BCE mantém tudo num eixo só — misturar bases é
+          // como as taxas ficam sutilmente erradas sem ninguém perceber.
+          if (Number.isFinite(v) && v > 0 && !rates[cod]) {
+            rates[cod] = rates.USD * v;
+            extra.push(cod);
+          }
+        }
+        extraDate = d2?.date ?? null;
+      }
+    } catch { /* sem as extras; segue com as do BCE */ }
+
+    // Só as moedas oferecidas, na ordem da tela. A ordem de inserção do objeto
+    // é o que o conversor usa para montar a lista — não há um segundo lugar
+    // decidindo isso.
+    const oferecidas = {};
+    for (const c of MOEDAS) if (Number.isFinite(rates[c])) oferecidas[c] = rates[c];
+
+    const faltando = MOEDAS.filter(c => !oferecidas[c]);
+
     const novo = {
+      v: VERSAO_CACHE,
       base: dados.base || 'EUR',
       date: dados.date,                       // dia da cotação, segundo o BCE
-      rates: { ...dados.rates, [dados.base || 'EUR']: 1 },
+      rates: oferecidas,
+      extra: extra.filter(c => oferecidas[c]), // quais vieram da segunda fonte
+      missing: faltando,                       // pedidas e não obtidas
+      extra_date: extraDate,
       fetched_at: agora,                      // quando ESTE app buscou
       source: 'ECB/Frankfurter',
     };

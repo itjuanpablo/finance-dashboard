@@ -35,8 +35,11 @@ const { getDb, getSetting, setSetting } =
   await import(pathToFileURL(path.join(ROOT, 'lib/db.js')).href);
 const db = getDb();
 
+const codigoRota = semComentarios(
+  fs.readFileSync(path.join(ROOT, 'app/api/rates/route.js'), 'utf8'));
+
 const CACHE = {
-  base: 'EUR', date: '2026-08-07',
+  v: 2, base: 'EUR', date: '2026-08-07',
   rates: { EUR: 1, USD: 1.1535, BRL: 5.8826, GBP: 0.85765 },
   fetched_at: Date.now(), source: 'ECB/Frankfurter',
 };
@@ -50,6 +53,34 @@ ok('BRL → USD é o inverso',
 ok('mesma moeda dá 1', taxa('BRL', 'BRL') === 1);
 ok('par sem passar por EUR também funciona',
   Math.abs(taxa('USD', 'GBP') - (0.85765 / 1.1535)) < 1e-12);
+
+console.log('\n1b. Moeda de fonte complementar entra pelo eixo certo');
+// A fonte extra diz "quanto vale 1 USD"; a base guardada é EUR. Converter pela
+// ponte USD é o que mantém tudo num eixo só — misturar bases é como uma taxa
+// fica sutilmente errada sem ninguém perceber.
+const ARS_POR_USD = 1496.21712208;
+const arsEmEur = CACHE.rates.USD * ARS_POR_USD;
+const comArs = { ...CACHE.rates, ARS: arsEmEur };
+const taxaArs = (de, para) => comArs[para] / comArs[de];
+ok('USD → ARS devolve o valor da fonte, não outro',
+  Math.abs(taxaArs('USD', 'ARS') - ARS_POR_USD) < 0.01, taxaArs('USD', 'ARS').toFixed(2));
+ok('BRL → ARS é coerente com o par USD',
+  Math.abs(taxaArs('BRL', 'ARS') - (ARS_POR_USD / taxa('USD', 'BRL'))) < 0.01);
+ok('ARS → USD é o inverso exato',
+  Math.abs(taxaArs('ARS', 'USD') * taxaArs('USD', 'ARS') - 1) < 1e-9);
+
+console.log('\n1c. Cache sabe de que época é');
+// Sem versão no cache, acrescentar uma moeda não tem efeito nenhum para quem
+// já tinha cotação salva: o app serve a lista antiga até expirar. Foi assim que
+// o peso argentino entrou no código e não apareceu na tela.
+ok('a rota versiona o cache', /VERSAO_CACHE/.test(codigoRota));
+ok('cache de versão diferente NÃO é considerado fresco',
+  /cache\?\.v === VERSAO_CACHE/.test(codigoRota));
+ok('a lista de moedas mora em um lugar só',
+  /const MOEDAS = \[/.test(codigoRota)
+  && !/const (DESTAQUE|MOEDAS) = \[/.test(semComentarios(
+      fs.readFileSync(path.join(ROOT, 'components/Conversor.js'), 'utf8'))));
+ok('ARS está na lista oferecida', /'ARS'/.test(codigoRota));
 
 console.log('\n2. Cache sobrevive em disco');
 setSetting(db, 'fx_cache', JSON.stringify(CACHE));
@@ -75,10 +106,19 @@ ok('nenhum valor padrão de cotação no código',
   !/rates\s*=\s*\{[^}]*BRL\s*:\s*[\d.]/.test(src));
 
 console.log('\n5. Nada do usuário atravessa a rede');
-const chamadas = src.match(/fetch\([^)]*\)/g) || [];
-ok('uma única chamada externa', chamadas.length === 1, chamadas);
-ok('a URL é fixa, sem interpolação',
-  /const FONTE = 'https:\/\/api\.frankfurter\.dev/.test(src) && !/FONTE.*\$\{/.test(src));
+const codigo = semComentarios(src);
+// Duas fontes: o BCE (principal) e a complementar, que cobre as moedas que o
+// BCE não publica — peso argentino entre elas. A checagem que importa não é
+// "quantas", é: toda URL é literal e nenhuma carrega dado do usuário.
+const urls = codigo.match(/https?:\/\/[^'"`\s]+/g) || [];
+ok('só as duas fontes conhecidas', urls.length === 2, urls);
+ok('nenhuma URL é montada com interpolação', !/https?:\/\/[^'"`]*\$\{/.test(codigo));
+ok('nenhum fetch recebe variável de conteúdo',
+  (codigo.match(/fetch\(\s*([A-Z_]+|'https)/g) || []).length ===
+  (codigo.match(/fetch\(/g) || []).length);
+ok('a fonte complementar falha sem derrubar a principal',
+  /catch\s*\{\s*\/\*[^*]*\*\/\s*\}|catch\s*\{[^}]*\}/.test(codigo)
+  && /let extra = \[\]/.test(codigo));
 
 console.log('\n6. A LINHA: o conversor não encosta no dinheiro guardado');
 const conv = fs.readFileSync(path.join(ROOT, 'components/Conversor.js'), 'utf8');

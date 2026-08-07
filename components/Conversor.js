@@ -14,8 +14,9 @@ import { useEffect, useState } from 'react';
 import { t } from '@/lib/i18n';
 import { fmtDate } from '@/lib/format';
 
-// As mais prováveis primeiro; o resto vem do que a fonte devolver.
-const DESTAQUE = ['USD', 'BRL', 'EUR', 'GBP', 'ARS'];
+// Quais moedas existem e em que ordem é decisão de app/api/rates/route.js
+// (const MOEDAS). Repetir a lista aqui criaria duas versões da mesma verdade,
+// e a segunda a envelhecer seria esta.
 
 // Aceita "1.234,56" e "1234.56": o usuário digita do jeito dele, e num app que
 // existe em dois países não dá para presumir qual separador é o decimal.
@@ -48,10 +49,7 @@ export default function Conversor({ onClose }) {
       .catch(e => setErro(String(e.message || e)));
   }, []);
 
-  const moedas = dados
-    ? [...DESTAQUE.filter(c => dados.rates[c]),
-       ...Object.keys(dados.rates).filter(c => !DESTAQUE.includes(c)).sort()]
-    : [];
+  const moedas = dados ? Object.keys(dados.rates) : [];
 
   // Regra de três sobre a base da fonte. Uma única requisição cobre todos os
   // pares, e nenhuma taxa é interpolada ou arredondada antes da hora.
@@ -73,6 +71,14 @@ export default function Conversor({ onClose }) {
     // não zerá-la.
     if (convertido != null) { setValor(exibir(convertido)); setLado(lado); }
   }
+
+  // Alguma das duas moedas escolhidas vem da fonte complementar?
+  const extras = dados?.extra ?? [];
+  const outraFonte = extras.includes(de) || extras.includes(para);
+  // O peso argentino merece aviso próprio: na Argentina convivem oficial, blue
+  // e MEP ao mesmo tempo, legalmente. Mostrar UM número sem dizer isso é o tipo
+  // de precisão falsa que faz alguém fechar negócio pelo valor errado.
+  const temArs = de === 'ARS' || para === 'ARS';
 
   const painel = (rotulo, moeda, setMoeda, texto, qual) => (
     <div className="fx-panel">
@@ -123,6 +129,11 @@ export default function Conversor({ onClose }) {
                   ? t('fx.stale', { d: fmtDate(dados.date) })
                   : t('fx.asOf', { d: fmtDate(dados.date) })}
                 <div>{t('fx.disclaimer')}</div>
+
+                {/* Procedência por moeda. Só aparece quando é o caso: aviso que
+                    sai sempre vira paisagem e ninguém lê no dia que importa. */}
+                {outraFonte && <div className="fx-warn">{t('fx.extraSource')}</div>}
+                {temArs && <div className="fx-warn">{t('fx.arsWarn')}</div>}
               </div>
             </>
           )}
