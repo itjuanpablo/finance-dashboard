@@ -12,14 +12,24 @@
 
 import { useEffect, useState } from 'react';
 import { t } from '@/lib/i18n';
+import { fmtDate } from '@/lib/format';
 
 // As mais prováveis primeiro; o resto vem do que a fonte devolver.
 const DESTAQUE = ['USD', 'BRL', 'EUR', 'GBP', 'ARS'];
 
+// Aceita "1.234,56" e "1234.56": o usuário digita do jeito dele, e num app que
+// existe em dois países não dá para presumir qual separador é o decimal.
 const num = (s) => {
-  const v = parseFloat(String(s).replace(/\./g, '').replace(',', '.'));
+  const txt = String(s).trim();
+  if (!txt) return null;
+  const v = parseFloat(
+    txt.includes(',') ? txt.replace(/\./g, '').replace(',', '.') : txt);
   return Number.isFinite(v) ? v : null;
 };
+
+const exibir = (v) => v == null ? '' : new Intl.NumberFormat(undefined, {
+  minimumFractionDigits: 2, maximumFractionDigits: 2,
+}).format(v);
 
 export default function Conversor({ onClose }) {
   const [dados, setDados] = useState(null);
@@ -27,6 +37,9 @@ export default function Conversor({ onClose }) {
   const [de, setDe] = useState('USD');
   const [para, setPara] = useState('BRL');
   const [valor, setValor] = useState('100');
+  // Qual dos dois campos o usuário está editando. Sem isto, formatar o campo
+  // de baixo enquanto ele digita nele apagaria a vírgula no meio da digitação.
+  const [lado, setLado] = useState('de');
 
   useEffect(() => {
     fetch('/api/rates')
@@ -44,12 +57,36 @@ export default function Conversor({ onClose }) {
   // pares, e nenhuma taxa é interpolada ou arredondada antes da hora.
   const taxa = dados && dados.rates[de] && dados.rates[para]
     ? dados.rates[para] / dados.rates[de] : null;
-  const entrada = num(valor);
-  const saida = taxa != null && entrada != null ? entrada * taxa : null;
 
-  const fmt = (v, moeda) => new Intl.NumberFormat(undefined, {
-    style: 'currency', currency: moeda, maximumFractionDigits: 2,
-  }).format(v);
+  const digitado = num(valor);
+  const convertido = taxa == null || digitado == null ? null
+    : lado === 'de' ? digitado * taxa : digitado / taxa;
+
+  // O campo que está sendo digitado mostra o texto cru; o outro mostra o
+  // resultado formatado.
+  const textoDe = lado === 'de' ? valor : exibir(convertido);
+  const textoPara = lado === 'para' ? valor : exibir(convertido);
+
+  function inverter() {
+    setDe(para); setPara(de);
+    // O que estava embaixo sobe: inverter tem de preservar a conta na tela,
+    // não zerá-la.
+    if (convertido != null) { setValor(exibir(convertido)); setLado(lado); }
+  }
+
+  const painel = (rotulo, moeda, setMoeda, texto, qual) => (
+    <div className="fx-panel">
+      <div className="fx-panel-head">
+        <span>{rotulo}</span>
+        <select value={moeda} onChange={e => setMoeda(e.target.value)}>
+          {moedas.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+      <input inputMode="decimal" value={texto} placeholder="0,00"
+        aria-label={`${rotulo} — ${moeda}`}
+        onChange={e => { setLado(qual); setValor(e.target.value); }} />
+    </div>
+  );
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -68,22 +105,13 @@ export default function Conversor({ onClose }) {
 
           {dados && (
             <>
-              <div className="fx-row">
-                <input className="control" inputMode="decimal" value={valor}
-                  onChange={e => setValor(e.target.value)} aria-label={t('fx.amount')} />
-                <select className="control" value={de} onChange={e => setDe(e.target.value)}>
-                  {moedas.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <button className="hbtn" title={t('fx.swap')}
-                  onClick={() => { setDe(para); setPara(de); }}>⇄</button>
-                <select className="control" value={para} onChange={e => setPara(e.target.value)}>
-                  {moedas.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+              <div className="fx-stack">
+                {painel(t('fx.from'), de, setDe, textoDe, 'de')}
+                <button className="fx-swap" title={t('fx.swap')}
+                  aria-label={t('fx.swap')} onClick={inverter}>⇅</button>
+                {painel(t('fx.to'), para, setPara, textoPara, 'para')}
               </div>
 
-              <div className="fx-result">
-                {saida == null ? '—' : fmt(saida, para)}
-              </div>
               {taxa != null && (
                 <div className="fx-rate">1 {de} = {taxa.toFixed(4)} {para}</div>
               )}
@@ -92,8 +120,8 @@ export default function Conversor({ onClose }) {
                   confiável de um número que parece confiável. */}
               <div className="fx-source">
                 {dados.stale
-                  ? t('fx.stale', { d: dados.date })
-                  : t('fx.asOf', { d: dados.date })}
+                  ? t('fx.stale', { d: fmtDate(dados.date) })
+                  : t('fx.asOf', { d: fmtDate(dados.date) })}
                 <div>{t('fx.disclaimer')}</div>
               </div>
             </>

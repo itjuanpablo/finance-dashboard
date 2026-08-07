@@ -6,10 +6,20 @@ node_modules/
 data/
 *.log
 
-# scripts/: o código é versionado (é onde vivem os testes), os artefatos não
+# scripts/: o código é versionado (é onde vivem os testes), os artefatos não.
+#
+# A linha `!scripts/testes/` NÃO é redundante, e a falta dela custou caro:
+# `scripts/*` casa a PASTA `scripts/testes` também, e o git não entra numa
+# pasta ignorada — então `!scripts/*.mjs` nunca alcançava o que estava dentro
+# dela. Quando os testes se mudaram para lá, os seis arquivos saíram do
+# repositório em silêncio: o commit dizia "agrupa os testes e cria npm test",
+# o push funcionou, e o que subiu foi um projeto sem suíte nenhuma.
+#
+# Para des-ignorar um arquivo é preciso des-ignorar antes cada pasta acima dele.
 scripts/*
 !scripts/*.sh
 !scripts/*.mjs
+!scripts/testes/
 
 # docs/: pasta de trabalho local, não vai para o repositório.
 # `docs/i18n.md` é a exceção histórica, já está rastreado.

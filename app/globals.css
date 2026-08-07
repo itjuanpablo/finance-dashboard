@@ -468,17 +468,56 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
    a mesma armadilha de medir palavra. Com quebra, o que não couber desce uma
    linha, em qualquer língua. Por isso a regra vale para TODA fileira de
    botões, não só a do cartão (ver scripts/testar-correcoes.mjs, seção 15). */
-/* ── Conversor de moedas ─────────────────────────────── */
-.fx-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.fx-row input.control { flex: 1 1 110px; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.fx-row select.control { flex: 0 1 92px; min-width: 0; }
-.fx-result {
-  font-size: 30px; font-weight: 700; letter-spacing: -.02em;
-  margin: 18px 0 2px; text-align: center; font-variant-numeric: tabular-nums;
+/* ── Conversor de moedas ─────────────────────────────────────────────────
+   Dois blocos empilhados em vez de uma fileira de controles: é o formato que
+   todo conversor usa, e não por moda — o valor é o protagonista, e a moeda é
+   um atributo dele, não um campo irmão. Numa fileira os quatro elementos têm
+   o mesmo peso e o olho não sabe onde começar. */
+.fx-stack { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.fx-panel {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 12px 14px;
+  transition: border-color .15s;
 }
-.fx-rate { text-align: center; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-panel:focus-within { border-color: var(--accent); }
+.fx-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); font-weight: 600;
+}
+/* O seletor de moeda perde a cara de campo: dentro do bloco ele é rótulo,
+   não entrada de dados. */
+.fx-panel-head select {
+  border: 0; background: none; color: var(--text);
+  font: inherit; font-size: 12.5px; font-weight: 700; letter-spacing: .04em;
+  padding: 2px 4px; border-radius: 7px; cursor: pointer; text-align: right;
+}
+.fx-panel-head select:hover { background: var(--surface-1); }
+.fx-panel input {
+  width: 100%; border: 0; background: none; padding: 2px 0; margin-top: 2px;
+  font: inherit; font-size: 28px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--text); font-variant-numeric: tabular-nums;
+}
+.fx-panel input:focus { outline: none; box-shadow: none; border: 0; }
+.fx-panel input::placeholder { color: var(--muted); font-weight: 500; }
+
+/* Botão de inverter, sobreposto na costura entre os dois blocos. */
+.fx-swap {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-size: 15px; cursor: pointer; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .15s, color .15s, border-color .15s;
+}
+.fx-swap:hover { color: var(--accent); border-color: var(--accent); transform: translate(-50%, -50%) rotate(180deg); }
+
+.fx-rate {
+  text-align: center; font-size: 13px; color: var(--muted);
+  margin-top: 14px; font-variant-numeric: tabular-nums;
+}
 .fx-source {
-  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
   font-size: 11.5px; color: var(--muted); line-height: 1.5;
 }
 
@@ -609,6 +648,10 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 input:focus, select.control:focus, .cat-editor input:focus,
 .acc-form input:focus, .acc-form select:focus, .goal-form input:focus {
+  /* O anel abaixo É o indicador de foco. Sem zerar o outline, o navegador
+     desenha o dele por cima — aquele contorno azul berrante que não combina
+     com tema nenhum e ignora o modo escuro. */
+  outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
