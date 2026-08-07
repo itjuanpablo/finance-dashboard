@@ -21,6 +21,7 @@ export default function Cartoes() {
   const [ref, setRef] = useState(null);
   const [toast, setToast] = useState(null);
   const [catList, setCatList] = useState([]);
+  const [busy, setBusy] = useState(false);
 
   // by_category e txs vêm com CHAVE de categoria; o nome exibido vem daqui
   const labelOf = useMemo(() => makeCatLabeler(catList), [catList]);
@@ -79,6 +80,54 @@ export default function Cartoes() {
     setTimeout(() => setToast(null), 2500);
   }
 
+  // Recarrega a fatura do servidor em vez de remendar o estado local: o status
+  // e a sugestão são DERIVADOS, e recalculá-los aqui seria manter duas versões
+  // da mesma regra — a que decide e a que a tela finge saber.
+  async function recarregar() {
+    const d = await (await fetch(`/api/invoices?card_id=${cardId}`)).json();
+    setData(d);
+  }
+
+  function aviso(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  }
+
+  async function quitar(inv, sugestao) {
+    setBusy(true);
+    const res = await fetch('/api/invoices/settle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        card_id: cardId,
+        ref: inv.ref,
+        // Confirmando a sugestão, o valor que vale é o que SAIU DA CONTA, não
+        // o total da fatura: se pagou a menos, o app tem de continuar dizendo
+        // que falta.
+        paid_cents: sugestao ? Math.abs(sugestao.amount_cents) : inv.total_cents,
+        paid_on: sugestao ? sugestao.date : inv.due_date,
+        tx_id: sugestao ? sugestao.tx_id : null,
+      }),
+    });
+    const d = await res.json();
+    setBusy(false);
+    if (d.error) return aviso(d.error);
+    await recarregar();
+    aviso(t('cards.settledOk'));
+  }
+
+  async function desquitar(inv) {
+    setBusy(true);
+    await fetch('/api/invoices/settle', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_id: cardId, ref: inv.ref }),
+    });
+    setBusy(false);
+    await recarregar();
+    aviso(t('cards.unsettledOk'));
+  }
+
   if (!cards) return <div className="container"><div className="loading">{t('common.loading')}</div></div>;
 
   if (!cards.length) {
@@ -132,7 +181,24 @@ export default function Cartoes() {
                 <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: '-.02em' }}>
                   {t('cards.invoice')} <span style={{ color: 'var(--accent)' }}>{fmtMonthLong(invoice.ref)}</span>
                 </div>
-                <span className="status-badge" style={{ color: st.color, borderColor: st.color }}>{t(st.key)}</span>
+                <div className="inv-status">
+                  <span className="status-badge" style={{ color: st.color, borderColor: st.color }}>{t(st.key)}</span>
+                  {invoice.total_cents > 0 && invoice.status !== 'futura' && (
+                    invoice.settlement ? (
+                      <span className="sub">
+                        {t('cards.settledOn', {
+                          v: fmtMoney(invoice.settlement.paid_cents),
+                          d: invoice.settlement.paid_on ? fmtDate(invoice.settlement.paid_on) : '—',
+                        })}
+                        <button className="link-btn quiet" disabled={busy}
+                          onClick={() => desquitar(invoice)}>{t('cards.unsettle')}</button>
+                      </span>
+                    ) : (
+                      <button className="link-btn" disabled={busy}
+                        onClick={() => quitar(invoice, null)}>{t('cards.settleManual')}</button>
+                    )
+                  )}
+                </div>
               </div>
               <button className="hbtn" disabled={!newer} style={{ opacity: newer ? 1 : .4 }}
                 onClick={() => newer && setRef(data.invoices[idx - 1].ref)}>›</button>
@@ -158,6 +224,23 @@ export default function Cartoes() {
                 <div className="sumbox-sub">{invoice.status === 'paga' ? t('cards.settled') : t('cards.dueSub')}</div>
               </div>
             </div>
+
+            {/* A sugestão vinda do extrato NUNCA é aplicada sozinha: mostra o
+                que achou — data, valor e descrição — e espera confirmação.
+                Casar dinheiro por semelhança é palpite; palpite confirmado por
+                quem sabe é decisão. */}
+            {invoice.suggestion && !invoice.settlement && (
+              <div className="settle-suggest">
+                <div className="grow">
+                  <div className="settle-suggest-title">{t('cards.settleFound')}</div>
+                  <div className="settle-suggest-sub">
+                    {fmtDate(invoice.suggestion.date)} · {fmtMoney(Math.abs(invoice.suggestion.amount_cents))} · {invoice.suggestion.description}
+                  </div>
+                </div>
+                <button className="hbtn" disabled={busy}
+                  onClick={() => quitar(invoice, invoice.suggestion)}>{t('cards.settleConfirm')}</button>
+              </div>
+            )}
           </div>
 
           <div className="grid">

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
 import { getDb, categoryColors, ACTIVE_TX } from '@/lib/db';
 import { installmentOf, invoicePaymentRef } from '@/lib/parsers/labels';
+import { quitacoesDo, sugerirPagamento, statusDaFatura } from '@/lib/quitacao';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -78,6 +79,11 @@ export async function GET(request) {
   const now = new Date();
   const curRef = refOf(now.toISOString().slice(0, 10), card.closing_day);
 
+  // Quitações afirmadas pelo usuário. Elas têm precedência sobre a inferência:
+  // ver statusDaFatura em lib/quitacao.js.
+  const quitacoes = quitacoesDo(db, cardId);
+  const txJaUsados = Object.values(quitacoes).map(q => q.tx_id).filter(Boolean);
+
   const list = Object.values(invoices)
     .filter(inv => inv.txs.length || inv.paid_cents)
     .sort((a, b) => b.ref.localeCompare(a.ref))
@@ -86,11 +92,22 @@ export async function GET(request) {
       const closing = `${y}-${pad(m)}-${pad(clampDay(y, m, card.closing_day))}`;
       let [dy, dm] = card.due_day <= card.closing_day ? addMonthsYm(y, m, 1) : [y, m];
       const due = `${dy}-${pad(dm)}-${pad(clampDay(dy, dm, card.due_day))}`;
-      const status = inv.ref > curRef ? 'futura'
-        : inv.ref === curRef ? 'aberta'
-        : inv.paid_cents >= inv.total_cents - 100 && inv.total_cents > 0 ? 'paga'
-        : inv.paid_cents > 0 ? 'parcial' : 'fechada';
-      return { ...inv, closing_date: closing, due_date: due, status, tx_count: inv.txs.length };
+      const quit = quitacoes[inv.ref] || null;
+      const status = statusDaFatura(inv, curRef, quit);
+
+      // Só procura candidato para o que ainda não está resolvido — e nunca
+      // para a fatura do mês corrente, que ainda está recebendo compras.
+      const sugestao = (!quit && status !== 'paga' && status !== 'aberta' && status !== 'futura')
+        ? sugerirPagamento(db, { closing_date: closing, due_date: due, total_cents: inv.total_cents },
+            sources, txJaUsados)
+        : null;
+
+      return {
+        ...inv, closing_date: closing, due_date: due, status,
+        tx_count: inv.txs.length,
+        settlement: quit,
+        suggestion: sugestao,
+      };
     });
 
   return NextResponse.json({

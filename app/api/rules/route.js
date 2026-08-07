@@ -25,6 +25,12 @@ export async function POST(request) {
     return NextResponse.json({ error: t('api.invalidParams') }, { status: 400 });
   }
   const p = pattern.trim();
+  // `%` e `_` são CURINGAS do LIKE, e `p` vem de texto do banco — um
+  // estabelecimento chamado "100% Saúde" viraria `LIKE '%100%_Saúde%'` e
+  // recategorizaria em massa coisa nenhuma a ver, sem erro e sem desfazer.
+  // Escapar é obrigatório aqui: o mesmo caractere que é dado para o usuário é
+  // sintaxe para o SQLite.
+  const literal = p.replace(/[\\%_]/g, c => '\\' + c);
   db.prepare(
     'INSERT INTO rules (pattern, category) VALUES (?, ?) ON CONFLICT(pattern) DO UPDATE SET category = excluded.category'
   ).run(p, category);
@@ -36,8 +42,8 @@ export async function POST(request) {
     // próximas importações (ver lib/importer.js).
     applied = db.prepare(
       `UPDATE transactions SET category = ?, transfer = ${category === CAT.TRANSFERS ? 1 : 0}
-       WHERE category = ? AND ${ACTIVE_TX} AND description LIKE ? COLLATE NOCASE`
-    ).run(category, CAT.TO_REVIEW, `%${p}%`).changes;
+       WHERE category = ? AND ${ACTIVE_TX} AND description LIKE ? ESCAPE '\\' COLLATE NOCASE`
+    ).run(category, CAT.TO_REVIEW, `%${literal}%`).changes;
   }
   return NextResponse.json({ ok: true, applied });
 }

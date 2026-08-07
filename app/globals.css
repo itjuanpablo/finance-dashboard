@@ -468,6 +468,20 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
    a mesma armadilha de medir palavra. Com quebra, o que não couber desce uma
    linha, em qualquer língua. Por isso a regra vale para TODA fileira de
    botões, não só a do cartão (ver scripts/testar-correcoes.mjs, seção 15). */
+/* ── Conversor de moedas ─────────────────────────────── */
+.fx-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fx-row input.control { flex: 1 1 110px; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.fx-row select.control { flex: 0 1 92px; min-width: 0; }
+.fx-result {
+  font-size: 30px; font-weight: 700; letter-spacing: -.02em;
+  margin: 18px 0 2px; text-align: center; font-variant-numeric: tabular-nums;
+}
+.fx-rate { text-align: center; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-source {
+  margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--muted); line-height: 1.5;
+}
+
 .btn-row {
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
 }
@@ -523,8 +537,44 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
   flex-wrap: wrap; padding: 18px 20px 12px; gap: 12px;
 }
 .status-badge {
-  display: inline-block; margin-top: 6px; font-size: 10.5px; font-weight: 700;
+  display: inline-block; font-size: 10.5px; font-weight: 700;
   letter-spacing: .08em; border: 1px solid; border-radius: 99px; padding: 3px 10px;
+}
+/* Selo de status + a ação que MUDA esse selo, lado a lado.
+   Antes a ação vivia numa faixa no rodapé do painel, longe da informação que
+   ela contradiz: o usuário lia "FATURA FECHADA" no topo e a correção estava a
+   uma tela de distância. Controle e consequência têm de se ver. */
+.inv-status {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; flex-wrap: wrap; margin-top: 7px;
+}
+.inv-status .sub { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+
+.link-btn {
+  background: none; border: 0; padding: 3px 7px; border-radius: 7px;
+  color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.link-btn:hover:not(:disabled) { background: var(--accent-soft); }
+.link-btn:disabled { opacity: .45; cursor: default; }
+.link-btn.quiet { color: var(--muted); font-weight: 500; }
+.link-btn.quiet:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+
+/* Sugestão de conciliação: é INFORMAÇÃO A CONFERIR, não um aviso.
+   Ganha destaque próprio porque o usuário precisa ler data, valor e descrição
+   antes de confirmar — enfiada numa linha de rodapé, ele confirmaria no
+   automático, que é exatamente o que a conciliação não pode induzir. */
+.settle-suggest {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin: 0 20px 18px; padding: 12px 14px;
+  background: var(--surface-2); border-left: 3px solid var(--green);
+  border-radius: 10px;
+}
+.settle-suggest .grow { flex: 1 1 240px; min-width: 0; }
+.settle-suggest-title { font-size: 13px; font-weight: 600; }
+.settle-suggest-sub {
+  font-size: 12px; color: var(--muted); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .inv-summary {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
