@@ -3,46 +3,33 @@
 import { useMemo, useState } from 'react';
 import { t, tn, catLabel } from '@/lib/i18n';
 import { CAT } from '@/lib/categories';
-import { stripInstallment } from '@/lib/parsers/labels';
+import { merchantKey } from '@/lib/merchant';
 import { fmtMoney } from '@/lib/format';
 
-// Prefixos operacionais que não identificam o estabelecimento.
-// As duas línguas ficam sempre ativas porque isto é texto do BANCO, não da
-// interface: um extrato brasileiro diz "Pagamento com QR Pix" mesmo numa
-// instância em espanhol, e vice-versa.
-const PREFIXES = [
-  // pt-BR
-  /^pagamento com qr pix\s+/i, /^pagamento\s+/i, /^compra\s+/i,
-  /^transferência pix recebida\s+/i, /^transferência pix enviada\s+/i,
-  /^dinheiro (retirado|reservado)\s+/i,
-  // es-AR — Confiança: BAIXA, inferido; ajustar com extrato real
-  /^pago con qr\s+/i, /^pago\s+/i, /^compra en\s+/i,
-  /^transferencia (recibida|enviada)\s+/i, /^débito automático\s+/i,
-];
-
-function merchantPattern(desc) {
-  let d = stripInstallment(desc);
-  for (const p of PREFIXES) d = d.replace(p, '');
-  const words = d.split(/\s+/).slice(0, 2).join(' ').trim();
-  return words.length >= 3 ? words : d.slice(0, 12).trim();
-}
+// Quantos grupos a tela mostra de uma vez. O resto é ANUNCIADO abaixo da
+// lista — antes ficava escondido, e como o usuário limpava 25 e reabria para
+// achar outros 25, parecia que categorizar não adiantava nada.
+const VISIVEIS = 25;
 
 // `label`: chave de categoria → nome exibido (ver LancamentoRapido).
 export default function RevisaoMassa({ txs, categories, label = catLabel, onClose, onDone }) {
   const [busy, setBusy] = useState(null);
 
-  const groups = useMemo(() => {
+  const { groups, ocultos } = useMemo(() => {
     const map = {};
     for (const tx of txs) {
       if (tx.category !== CAT.TO_REVIEW) continue;
-      const pattern = merchantPattern(tx.description);
+      const pattern = merchantKey(tx.description);
       if (pattern.length < 3) continue;
-      const key = pattern.toLowerCase();
+      // Acentos e caixa não podem separar grupos: "Farmácia" e "FARMÁCIA" são
+      // o mesmo lugar, e antes viravam duas linhas para categorizar.
+      const key = pattern.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
       const g = (map[key] = map[key] || { pattern, count: 0, cents: 0, sample: tx.description });
       g.count++;
       g.cents += Math.abs(tx.amount_cents);
     }
-    return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 25);
+    const todos = Object.values(map).sort((a, b) => b.count - a.count);
+    return { groups: todos.slice(0, VISIVEIS), ocultos: Math.max(0, todos.length - VISIVEIS) };
   }, [txs]);
 
   async function assign(group, category) {
@@ -89,6 +76,11 @@ export default function RevisaoMassa({ txs, categories, label = catLabel, onClos
               </select>
             </div>
           ))}
+          {ocultos > 0 && (
+            <div className="sub" style={{ padding: '12px 0 4px', textAlign: 'center' }}>
+              {t('review.more', { n: ocultos })}
+            </div>
+          )}
         </div>
       </div>
     </div>

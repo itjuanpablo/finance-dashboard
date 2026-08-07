@@ -19,7 +19,9 @@
 // `children` entra ANTES dos botões fixos: é onde cada página põe o que é dela
 // (os atalhos e o seletor de mês no painel, o filtro de ano em Evolução).
 
+import { useState } from 'react';
 import SeletorIdioma from './SeletorIdioma';
+import Conversor from './Conversor';
 import { configurePin } from './PinGate';
 import { t } from '@/lib/i18n';
 
@@ -35,9 +37,17 @@ function alternar(classe, chave) {
 // reaplica tudo antes da hidratação. Um useState aqui só criaria uma segunda
 // fonte de verdade para a mesma informação.
 export default function AcoesCabecalho({ children, pin = false }) {
+  // O conversor é o único botão daqui com estado: ele abre um modal. Os outros
+  // mexem em classes do <html> e não precisam do React para lembrar nada.
+  const [fx, setFx] = useState(false);
+
   return (
     <div className="header-right">
       {children}
+
+      <button className="theme-toggle" title={t('fx.title')}
+        onClick={() => setFx(true)}>⇄</button>
+      {fx && <Conversor onClose={() => setFx(false)} />}
 
       <SeletorIdioma />
 
