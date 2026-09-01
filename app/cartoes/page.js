@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { t, tn, makeCatLabeler } from '@/lib/i18n';
 import AcoesCabecalho from '@/components/AcoesCabecalho';
 import { CAT } from '@/lib/categories';
+import { apenasRaizes } from '@/lib/arvore-categorias';
 import { fmtMoney, fmtDate, fmtDayMonth, fmtMonthLong, fmtMonthShort } from '@/lib/format';
 
 const STATUS = {
@@ -143,8 +144,10 @@ export default function Cartoes() {
 
   const cats = data?.categories ?? {};
   const st = invoice ? STATUS[invoice.status] : null;
+  // Raízes com os filhos dentro: a lista de categorias da fatura tem de somar
+  // o valor da fatura. Ver lib/arvore-categorias.js.
   const catEntries = invoice
-    ? Object.entries(invoice.by_category).sort((a, b) => b[1] - a[1]) : [];
+    ? Object.entries(apenasRaizes(invoice.by_category, catList)).sort((a, b) => b[1] - a[1]) : [];
   const catMax = Math.max(1, ...catEntries.map(([, v]) => v));
 
   return (

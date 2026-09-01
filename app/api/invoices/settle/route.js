@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
 import { getDb, ACTIVE_TX } from '@/lib/db';
+import { isValidIsoDate } from '@/lib/date';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,14 +18,18 @@ export const dynamic = 'force-dynamic';
 // já está nos dados, não um fato novo.
 
 const REF_RX = /^\d{4}-(0[1-9]|1[0-2])$/;
-const DATA_RX = /^\d{4}-\d{2}-\d{2}$/;
-
 export async function POST(request) {
   const { card_id, ref, paid_cents, paid_on, tx_id } = await request.json();
   const db = getDb();
 
   if (!Number.isInteger(card_id) || !REF_RX.test(String(ref ?? ''))) {
     return NextResponse.json({ error: t('api.invalidParams') }, { status: 400 });
+  }
+  // Data é opcional (a pessoa pode só afirmar a quitação), mas, quando vem,
+  // precisa existir no calendário. Antes 31/02 era silenciosamente trocado por
+  // null, apagando uma informação que a pessoa acabara de fornecer.
+  if (paid_on != null && paid_on !== '' && !isValidIsoDate(paid_on)) {
+    return NextResponse.json({ error: t('api.invalidDate') }, { status: 400 });
   }
   if (!db.prepare('SELECT 1 FROM cards WHERE id = ?').get(card_id)) {
     return NextResponse.json({ error: t('api.cardNotFound') }, { status: 404 });
@@ -38,7 +43,7 @@ export async function POST(request) {
     return NextResponse.json({ error: t('api.invalidParams') }, { status: 400 });
   }
 
-  const quando = DATA_RX.test(String(paid_on ?? '')) ? paid_on : null;
+  const quando = isValidIsoDate(paid_on) ? paid_on : null;
 
   // tx_id só é aceito se a transação EXISTIR e não estiver já usada em outra
   // quitação — senão um mesmo pagamento quitaria duas faturas.

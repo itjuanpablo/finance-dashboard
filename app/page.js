@@ -8,6 +8,7 @@ import AcoesCabecalho from '@/components/AcoesCabecalho';
 import LancamentoRapido from '@/components/LancamentoRapido';
 import { t, tn, makeCatLabeler } from '@/lib/i18n';
 import { CAT, NON_BUDGET_CATEGORIES } from '@/lib/categories';
+import { dobrar, apenasRaizes, ordenarComFilhos } from '@/lib/arvore-categorias';
 import { stripInstallment as stripParcela, installmentOf } from '@/lib/parsers/labels';
 import {
   fmtMoney, fmtMoneyIn, fmtDayMonth, fmtMonthLong, fmtMonthShort,
@@ -129,10 +130,10 @@ export default function Dashboard() {
 
   const insights = useMemo(() => {
     if (!txs || !dismissed) return [];
-    return computeInsights({ transactions: txs, goals, cards, billOccurrences, catLabel: labelOf })
+    return computeInsights({ transactions: txs, goals, cards, billOccurrences, catLabel: labelOf, categorias: catList })
       .filter(i => !dismissed.has(i.id))
       .slice(0, 3);
-  }, [txs, goals, cards, billOccurrences, dismissed, labelOf]);
+  }, [txs, goals, cards, billOccurrences, dismissed, labelOf, catList]);
 
   // vencimentos a exibir: atrasadas + próximas 45 dias, não pagas
   const upcomingBills = useMemo(() => {
@@ -329,22 +330,33 @@ export default function Dashboard() {
     return [...porMoeda.values()].sort((a, b) => a.moeda.localeCompare(b.moeda));
   }, [monthTxs]);
 
+  // A rosca mostra SÓ AS RAÍZES, com os filhos já somados dentro.
+  //
+  // Somar o mapa dobrado inteiro contaria cada subcategoria duas vezes — uma
+  // nela, outra dentro da mãe — e o total do gráfico não bateria com o total
+  // do mês. `apenasRaizes` existe para tornar esse erro impossível de escrever
+  // por distração; ver lib/arvore-categorias.js.
   const donut = useMemo(() => {
     const spent = {};
     monthTxs.filter(tx => tx.amount_cents < 0 && !tx.transfer && tx.currency == null)
       .forEach(tx => { spent[tx.category] = (spent[tx.category] || 0) - tx.amount_cents; });
-    const entries = Object.entries(spent).sort((a, b) => b[1] - a[1]);
+    const raizes = apenasRaizes(spent, catList);
+    const entries = Object.entries(raizes).sort((a, b) => b[1] - a[1]);
     const total = entries.reduce((s, [, v]) => s + v, 0);
-    return { entries, total };
-  }, [monthTxs]);
+    return { entries, total, detalhe: spent };
+  }, [monthTxs, catList]);
 
   // gasto por categoria no mês efetivo (para metas)
+  //
+  // `dobrar` e não `apenasRaizes`: uma meta pode estar numa subcategoria, e
+  // nesse caso precisa do valor dela sozinha. Meta na mãe usa a chave da mãe,
+  // que a dobra já deixou com o total do ramo inteiro.
   const spentByCat = useMemo(() => {
     const map = {};
     (txs || []).filter(tx => tx.date.startsWith(effMonth) && tx.amount_cents < 0 && !tx.transfer)
       .forEach(tx => { map[tx.category] = (map[tx.category] || 0) - tx.amount_cents; });
-    return map;
-  }, [txs, effMonth]);
+    return dobrar(map, catList);
+  }, [txs, effMonth, catList]);
 
   // orçamento envelope: sobra/estouro do mês anterior ajusta o orçamento (rollover)
   const prevMonth = effMonth ? addMonths(effMonth, -1) : '';
@@ -352,8 +364,11 @@ export default function Dashboard() {
     const map = {};
     (txs || []).filter(tx => tx.date.startsWith(prevMonth) && tx.amount_cents < 0 && !tx.transfer)
       .forEach(tx => { map[tx.category] = (map[tx.category] || 0) - tx.amount_cents; });
-    return map;
-  }, [txs, prevMonth]);
+    // Mesma dobra do mês corrente: sem isto, o rollover compararia o orçamento
+    // da mãe contra um gasto que não conta os filhos, e sobraria dinheiro que
+    // não existe.
+    return dobrar(map, catList);
+  }, [txs, prevMonth, catList]);
   const prevMonthHasData = useMemo(
     () => (txs || []).some(tx => tx.date.startsWith(prevMonth)), [txs, prevMonth]);
   const effectiveBudget = g => {

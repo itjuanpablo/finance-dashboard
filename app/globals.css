@@ -522,6 +522,9 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 }
 .fx-warn { margin-top: 6px; color: var(--amber); }
 
+/* Marca de subcategoria na lista de Administrar. */
+.sub-mark { color: var(--muted); font-size: 13px; margin-right: -4px; }
+
 .btn-row {
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
 }

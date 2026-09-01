@@ -22,8 +22,8 @@
 //  4. ÍNDICES. Confere com EXPLAIN QUERY PLAN que as três consultas quentes
 //     usam índice em vez de varrer a tabela.
 //  5. VALIDAÇÃO do PUT /api/bills. FK ligada + id inexistente = 500 com stack.
-//  6. BACKUP. Falha visível (não `catch { return null }`) e nome com segundos,
-//     senão cinco arquivos importados juntos geram um backup só.
+//  6. BACKUP. Falha visível (não `catch { return null }`) e criação exclusiva,
+//     para que importações simultâneas nunca sobrescrevam uma cópia.
 //
 // Este arquivo se reexecuta com TZ=America/Sao_Paulo se não estiver nesse fuso:
 // o teste de data precisa de um fuso negativo para ter sentido.
@@ -86,6 +86,7 @@ register('data:text/javascript,' + encodeURIComponent(`
 `));
 
 const { getDb, backupDb, dataDir } = await import(path.join(ROOT, 'lib/db.js'));
+const { isValidIsoDate } = await import(path.join(ROOT, 'lib/date.js'));
 const { localIsoDate, localIsoMonth, computeInsights } =
   await import(path.join(ROOT, 'lib/insights.js'));
 const { installmentOf, stripInstallment } =
@@ -93,6 +94,10 @@ const { installmentOf, stripInstallment } =
 const billsRoute = await import(path.join(ROOT, 'app/api/bills/route.js'));
 const batchesRoute = await import(path.join(ROOT, 'app/api/batches/route.js'));
 const txRoute = await import(path.join(ROOT, 'app/api/transactions/route.js'));
+const splitRoute = await import(path.join(ROOT, 'app/api/transactions/split/route.js'));
+const { currentInvoiceRef } = await import(path.join(ROOT, 'app/api/invoices/route.js'));
+const accountsRoute = await import(path.join(ROOT, 'app/api/accounts/route.js'));
+const settleRoute = await import(path.join(ROOT, 'app/api/invoices/settle/route.js'));
 const { CAT } = await import(path.join(ROOT, 'lib/categories.js'));
 
 const db = getDb();
@@ -328,6 +333,39 @@ secao('6. Helper de data usa o dia LOCAL, não o UTC');
   eq(localIsoDate(new Date(2026, 6, 15, 0, 1, 0)), '2026-07-15', 'borda 00:01 local');
 }
 
+secao('6b. APIs recusam datas que não existem no calendário');
+{
+  for (const invalida of ['2026-02-29', '2024-02-30', '2026-04-31', '2026-13-01', '2026-00-01']) {
+    ok(!isValidIsoDate(invalida), `${invalida} não passa no validador central`);
+  }
+  ok(isValidIsoDate('2024-02-29'), '29/02 de ano bissexto é válida');
+
+  const manual = await call(txRoute.POST, {
+    date: '2026-02-31', description: 'data impossível', amount_cents: -1000, category: CAT.FOOD,
+  }, 'http://local/api/transactions');
+  eq(manual.status, 400, 'POST de lançamento rejeita 31/02');
+
+  await call(txRoute.POST, {
+    date: '2026-02-28', description: 'lançamento válido para editar', amount_cents: -1000, category: CAT.FOOD,
+  }, 'http://local/api/transactions');
+  const existente = db.prepare(
+    "SELECT id FROM transactions WHERE description = 'lançamento válido para editar' ORDER BY id DESC LIMIT 1"
+  ).get();
+  const edicao = await call(txRoute.PATCH, { id: existente.id, date: '2026-04-31' },
+    'http://local/api/transactions', 'PATCH');
+  eq(edicao.status, 400, 'PATCH de lançamento rejeita 31/04');
+
+  const conta = await call(accountsRoute.POST, {
+    name: 'Conta com data impossível', initial_date: '2026-02-30', initial_cents: 0,
+  }, 'http://local/api/accounts');
+  eq(conta.status, 400, 'conta rejeita saldo inicial em data impossível');
+
+  const quitacao = await call(settleRoute.POST, {
+    card_id: 1, ref: '2026-08', paid_cents: 1000, paid_on: '2026-02-30',
+  }, 'http://local/api/invoices/settle');
+  eq(quitacao.status, 400, 'quitação rejeita data impossível em vez de apagá-la');
+}
+
 secao('7. Insight de vencimento respeita o dia local às 21h');
 {
   // Conta vencendo em 16/07. Às 21h30 do dia 15, o certo é "vence amanhã".
@@ -350,6 +388,17 @@ secao('7. Insight de vencimento respeita o dia local às 21h');
     'diz "amanhã", não "hoje", às 21h30 do dia anterior', conta?.title);
   ok(!conta?.title.includes(t('insight.when.today')),
     'não diz "hoje" para conta que vence amanhã', conta?.title);
+}
+
+secao('7b. Fatura aberta respeita o dia local às 21h');
+{
+  // 28/08 às 21h30 em São Paulo já é 29/08 em UTC. Num cartão que fecha no
+  // dia 28, UTC avançaria a referência de agosto para setembro cedo demais.
+  const noite = new Date(2026, 7, 28, 21, 30, 0);
+  eq(noite.toISOString().slice(0, 10), '2026-08-29',
+    'confirmação: UTC já avançou para 29/08');
+  eq(currentInvoiceRef(28, noite), '2026-08',
+    'fatura no dia local do fechamento ainda é a competência de agosto');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -387,15 +436,15 @@ secao('9. Índices que evitam varredura da tabela');
 // ═══════════════════════════════════════════════════════════════════════════
 // 10. Backup
 // ═══════════════════════════════════════════════════════════════════════════
-secao('10. backupDb: falha visível e nome com resolução de segundo');
+secao('10. backupDb: falha visível e nome único');
 {
   const b = backupDb(db, 'teste');
   ok(b && typeof b === 'object' && 'path' in b && 'error' in b,
     'devolve { path, error } — quem chama pode abortar e avisar', b);
   ok(b.path && fs.existsSync(b.path), 'arquivo de backup existe', b);
   ok(b.error === null, 'sem erro no caminho feliz', b.error);
-  ok(/fluxo-teste-\d{14}\.db$/.test(path.basename(b.path || '')),
-    'carimbo com 14 dígitos (AAAAMMDDHHMMSS) — inclui segundos', path.basename(b.path || ''));
+  ok(/fluxo-teste-\d{17}\.db$/.test(path.basename(b.path || '')),
+    'carimbo com 17 dígitos (AAAAMMDDHHMMSSmmm) — inclui milissegundos', path.basename(b.path || ''));
 
   // Falha real: diretório de backups substituído por um ARQUIVO. mkdirSync
   // estoura EEXIST/ENOTDIR e o erro tem de aparecer, não virar null silencioso.
@@ -429,7 +478,7 @@ secao('11. DELETE /api/batches faz backup antes e conta edição manual');
   ok(r.status === 200, 'desfazer respondeu 200', r);
   eq(r.body.removed, 3, 'removeu as 3 transações do lote');
   eq(r.body.manuallyEdited, 2, 'avisa que 2 tinham edição manual (essas não voltam do arquivo)');
-  ok(/^fluxo-pre-undo-\d{14}\.db$/.test(r.body.backup || ''),
+  ok(/^fluxo-pre-undo-\d{17}(?:-\d+)?\.db$/.test(r.body.backup || ''),
     'devolve o nome do backup pré-undo', r.body.backup);
   const depois = fs.readdirSync(path.join(dataDir(), 'backups')).length;
   ok(depois > antes, 'backup foi criado ANTES do delete', [antes, depois]);
@@ -439,27 +488,52 @@ secao('11. DELETE /api/batches faz backup antes e conta edição manual');
   eq(semId.status, 400, 'DELETE sem id → 400');
 }
 
-secao('12. Vários backups no mesmo minuto não se sobrescrevem');
+secao('12. Backups simultâneos nunca se sobrescrevem');
 {
-  // Era o caso real: arrastar cinco arquivos de uma vez roda cinco importações
-  // no mesmo minuto. Com carimbo de minuto sobrava UM backup.
+  // Esta sequência não espera nem um milissegundo. Com o antigo copyFileSync
+  // normal, duas chamadas no mesmo segundo reutilizavam o nome e a segunda
+  // sobrescrevia a primeira silenciosamente.
   const bdir = path.join(dataDir(), 'backups');
   fs.rmSync(bdir, { recursive: true, force: true });
   const nomes = new Set();
   for (let i = 0; i < 3; i++) {
-    // segundos distintos: o carimbo tem resolução de segundo, então o teste
-    // espera 1 s entre cópias em vez de fingir que resolve colisão sub-segundo
-    const b = backupDb(db, `lote${i}`);
+    const b = backupDb(db, 'lote');
+    ok(b.path && fs.existsSync(b.path), `backup simultâneo ${i + 1} existe`, b);
     nomes.add(path.basename(b.path));
   }
-  eq(nomes.size, 3, 'três tags distintas geram três arquivos');
-  // mesma tag, segundos diferentes
-  const a = backupDb(db, 'mesmo');
-  await new Promise(r => setTimeout(r, 1100));
-  const b2 = backupDb(db, 'mesmo');
-  ok(path.basename(a.path) !== path.basename(b2.path),
-    'mesma tag em segundos diferentes gera arquivos diferentes',
-    [path.basename(a.path), path.basename(b2.path)]);
+  eq(nomes.size, 3, 'três chamadas seguidas com a mesma tag geram três arquivos');
+  eq(fs.readdirSync(bdir).filter(f => f.startsWith('fluxo-lote-')).length, 3,
+    'nenhum backup foi sobrescrito');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12b. Divisão preserva a moeda
+// ═══════════════════════════════════════════════════════════════════════════
+secao('12b. Dividir lançamento preserva a moeda estrangeira');
+{
+  // O pai em USD nunca entra no saldo em BRL. Se as partes nascessem com
+  // currency = NULL, passariam a entrar — número plausível e errado.
+  const baseAntes = db.prepare(
+    'SELECT COALESCE(SUM(amount_cents), 0) AS s FROM transactions WHERE deleted_at IS NULL AND has_children = 0 AND currency IS NULL'
+  ).get().s;
+  const pai = db.prepare(`
+    INSERT INTO transactions (date, description, amount_cents, category, transfer, source, hash, currency)
+    VALUES ('2026-08-20', 'COMPRA USD PARA DIVIDIR', -1291, ?, 0, 'teste-usd', ?, 'USD')
+  `).run(CAT.FOOD, `split-usd:${randomUUID()}`);
+  const id = Number(pai.lastInsertRowid);
+  const r = await call(splitRoute.POST, {
+    id,
+    parts: [
+      { amount_cents: -1000, category: CAT.FOOD },
+      { amount_cents: -291, category: CAT.SHOPPING },
+    ],
+  });
+  eq(r.status, 200, 'rota de divisão aceita lançamento em USD');
+  eq(db.prepare('SELECT DISTINCT currency FROM transactions WHERE parent_id = ? ORDER BY currency').all(id)
+    .map(x => x.currency), ['USD'], 'todas as partes preservam USD');
+  eq(db.prepare(
+    'SELECT COALESCE(SUM(amount_cents), 0) AS s FROM transactions WHERE deleted_at IS NULL AND has_children = 0 AND currency IS NULL'
+  ).get().s, baseAntes, 'dividir USD não altera o total da moeda-base');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

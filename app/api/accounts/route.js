@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
 import { getDb, ACTIVE_TX, BASE_CURRENCY } from '@/lib/db';
+import { isValidIsoDate } from '@/lib/date';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,6 +62,10 @@ export async function POST(request) {
   if (!name || !String(name).trim()) {
     return NextResponse.json({ error: t('api.nameRequired') }, { status: 400 });
   }
+  const initialDate = initial_date || '1970-01-01';
+  if (!isValidIsoDate(initialDate)) {
+    return NextResponse.json({ error: t('api.invalidDate') }, { status: 400 });
+  }
   const db = getDb();
   db.exec('BEGIN');
   try {
@@ -68,7 +73,7 @@ export async function POST(request) {
       INSERT INTO accounts (name, institution, kind, initial_cents, initial_date, currency)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(String(name).trim(), String(institution || '').trim(),
-      kind || 'corrente', Math.round(initial_cents || 0), initial_date || '1970-01-01',
+      kind || 'corrente', Math.round(initial_cents || 0), initialDate,
       // Vazio vira NULL, e NULL quer dizer "moeda da instalação". Guardar 'BRL'
       // numa instalação brasileira seria repetir o padrão em cada linha e criar
       // dois jeitos de dizer a mesma coisa.
@@ -87,6 +92,9 @@ export async function PATCH(request) {
   const db = getDb();
   if (!db.prepare('SELECT 1 FROM accounts WHERE id = ?').get(id)) {
     return NextResponse.json({ error: t('api.accountNotFound') }, { status: 404 });
+  }
+  if (initial_date !== undefined && !isValidIsoDate(initial_date)) {
+    return NextResponse.json({ error: t('api.invalidDate') }, { status: 400 });
   }
   db.exec('BEGIN');
   try {

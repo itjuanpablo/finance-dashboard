@@ -3,6 +3,7 @@ import { t } from '@/lib/i18n';
 import crypto from 'crypto';
 import { getDb, categoryColors, isValidCategory, ACTIVE_TX } from '@/lib/db';
 import { CAT } from '@/lib/categories';
+import { isValidIsoDate } from '@/lib/date';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,7 +56,7 @@ export async function POST(request) {
   const db = getDb();
   const desc = String(description || '').trim();
   const cents = Math.round(Number(amount_cents));
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) {
+  if (!isValidIsoDate(date)) {
     return NextResponse.json({ error: t('api.invalidDate') }, { status: 400 });
   }
   if (!desc) return NextResponse.json({ error: t('api.descRequired') }, { status: 400 });
@@ -130,8 +131,8 @@ export async function PATCH(request) {
     args.transfer = body.transfer ? 1 : 0;
   }
   if (body.date !== undefined) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
-      return NextResponse.json({ error: t('api.invalidDateFormat') }, { status: 400 });
+    if (!isValidIsoDate(body.date)) {
+      return NextResponse.json({ error: t('api.invalidDate') }, { status: 400 });
     }
     if (tx.original_date == null) { sets.push('original_date = @od'); args.od = tx.date; }
     sets.push('date = @date'); args.date = body.date;

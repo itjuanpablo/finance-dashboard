@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { t } from '@/lib/i18n';
 import { getDb, categoryRows, backupDb, ACTIVE_TX, BASE_CURRENCY } from '@/lib/db';
 import { SYSTEM_CATEGORIES, slugifyCategory, normalizeName } from '@/lib/categories';
+import { problemaComPai } from '@/lib/arvore-categorias';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,7 +55,7 @@ export async function GET() {
 // POST: cria categoria do usuário. A chave vem do slug do nome e `custom = 1`:
 // nome digitado por gente não se traduz.
 export async function POST(request) {
-  const { name, color, emoji } = await request.json();
+  const { name, color, emoji, parent_key } = await request.json();
   const n = String(name || '').trim();
   if (n.length < 2 || !/^#[0-9a-fA-F]{6}$/.test(color || '')) {
     return NextResponse.json({ error: t('manage.catErrName') }, { status: 400 });
@@ -74,11 +75,17 @@ export async function POST(request) {
     return NextResponse.json({ error: t('manage.catErrDuplicate') }, { status: 409 });
   }
 
+  const pai = parent_key ? String(parent_key) : null;
+  if (pai) {
+    const erro = problemaComPai(key, pai, categoryRows(db, { includeArchived: true }));
+    if (erro) return NextResponse.json({ error: t(erro) }, { status: 400 });
+  }
+
   try {
     const max = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM categories').get().m;
     db.prepare(
-      'INSERT INTO categories (key, name, color, emoji, sort_order, custom) VALUES (?, ?, ?, ?, ?, 1)')
-      .run(key, n, color, String(emoji || '').trim(), max + 1);
+      'INSERT INTO categories (key, name, color, emoji, sort_order, custom, parent_key) VALUES (?, ?, ?, ?, ?, 1, ?)')
+      .run(key, n, color, String(emoji || '').trim(), max + 1, pai);
   } catch {
     // rede de segurança para o UNIQUE de name/key (corrida entre duas abas)
     return NextResponse.json({ error: t('manage.catErrDuplicate') }, { status: 409 });
@@ -91,7 +98,7 @@ export async function POST(request) {
 // chave nunca muda. Numa canônica, renomear marca `custom = 1` — a tradução
 // deixa de se aplicar e o nome digitado passa a valer, com o dado intacto.
 export async function PATCH(request) {
-  const { id, name, color, emoji, archived } = await request.json();
+  const { id, name, color, emoji, archived, parent_key } = await request.json();
   const db = getDb();
   const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
   if (!cat) return NextResponse.json({ error: t('manage.catNotFound') }, { status: 404 });
@@ -116,6 +123,15 @@ export async function PATCH(request) {
     if (archived !== undefined) {
       if (isSystem) throw new Error(t('manage.catSystemArchive'));
       db.prepare('UPDATE categories SET archived = ? WHERE id = ?').run(archived ? 1 : 0, id);
+    }
+    if (parent_key !== undefined) {
+      const pai = parent_key ? String(parent_key) : null;
+      // As guardas leem a lista COM arquivadas: aninhar debaixo de uma
+      // arquivada é confuso, mas descobrir isso só na hora de desarquivar
+      // seria pior.
+      const erro = pai && problemaComPai(cat.key, pai, categoryRows(db, { includeArchived: true }));
+      if (erro) throw new Error(t(erro));
+      db.prepare('UPDATE categories SET parent_key = ? WHERE id = ?').run(pai, id);
     }
     db.exec('COMMIT');
   } catch (e) {
@@ -150,6 +166,13 @@ export async function DELETE(request) {
 
   db.exec('BEGIN');
   try {
+    // Filhos sobem para o topo em vez de sumirem com a mãe. Apagá-los junto
+    // levaria transações embora sem o usuário pedir; deixá-los apontando para
+    // uma chave que não existe mais os esconderia de toda tela — e categoria
+    // invisível é dinheiro invisível.
+    var filhos = db.prepare(
+      'UPDATE categories SET parent_key = NULL WHERE parent_key = ?').run(cat.key).changes;
+
     if (txCount > 0) {
       const dest = db.prepare(
         'SELECT key FROM categories WHERE key = ? AND id != ?').get(moveTo || '', id);
@@ -167,6 +190,6 @@ export async function DELETE(request) {
     return NextResponse.json({ error: e.message }, { status: 400 });
   }
   return NextResponse.json({
-    ok: true, moved: txCount, backup: backup.path.split('/').pop(),
+    ok: true, moved: txCount, orphaned: filhos, backup: backup.path.split('/').pop(),
   });
 }

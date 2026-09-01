@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { t, makeCatLabeler } from '@/lib/i18n';
 import { localIsoMonth } from '@/lib/insights';
+import { dobrar, apenasRaizes } from '@/lib/arvore-categorias';
 import { fmtMoney, fmtDayMonth, fmtMonthLong, fmtToday } from '@/lib/format';
 import AcoesCabecalho from '@/components/AcoesCabecalho';
 
@@ -11,16 +12,21 @@ const addMonths = (ym, k) => {
   return `${y + Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, '0')}`;
 };
 
-function monthStats(txs, ym) {
+function monthStats(txs, ym, catList) {
   const mts = txs.filter(tx => tx.date.startsWith(ym) && !tx.transfer);
-  const cats = {};
+  const bruto = {};
   mts.filter(tx => tx.amount_cents < 0)
-    .forEach(tx => { cats[tx.category] = (cats[tx.category] || 0) - tx.amount_cents; });
+    .forEach(tx => { bruto[tx.category] = (bruto[tx.category] || 0) - tx.amount_cents; });
+  // A tabela "gastos por categoria" mostra as raízes com os filhos dentro; a
+  // porcentagem sobre o total do mês só fecha assim. O detalhe por filho fica
+  // em `catsDetalhe`, para quem quiser abrir.
+  const cats = apenasRaizes(bruto, catList);
+  const catsDetalhe = dobrar(bruto, catList);
   return {
     in: mts.filter(tx => tx.amount_cents > 0).reduce((s, tx) => s + tx.amount_cents, 0),
     out: mts.filter(tx => tx.amount_cents < 0).reduce((s, tx) => s - tx.amount_cents, 0),
     n: mts.length,
-    cats,
+    cats, catsDetalhe,
     top: mts.filter(tx => tx.amount_cents < 0)
       .sort((a, b) => a.amount_cents - b.amount_cents).slice(0, 10),
   };
@@ -53,22 +59,25 @@ export default function Relatorio() {
 
   const data = useMemo(() => {
     if (!txs || !mes) return null;
-    const cur = monthStats(txs, mes);
+    const cur = monthStats(txs, mes, catList);
     const prevYm = addMonths(mes, -1);
-    const prev = monthStats(txs, prevYm);
+    const prev = monthStats(txs, prevYm, catList);
     const catRows = Object.entries(cur.cats).sort((a, b) => b[1] - a[1]).map(([cat, v]) => ({
       cat, v,
       pct: cur.out ? v / cur.out * 100 : 0,
       delta: prev.cats[cat] != null ? (v - prev.cats[cat]) : null,
     }));
+    // Orçamento usa `catsDetalhe`, não `cats`: a meta pode estar numa
+    // subcategoria, e essa não aparece entre as raízes. Meta na mãe encontra
+    // ali o total do ramo inteiro, que é o que o usuário orçou.
     const budget = goals.map(g => {
-      const carry = g.rollover && prev.n ? g.limit_cents - (prev.cats[g.category] || 0) : 0;
+      const carry = g.rollover && prev.n ? g.limit_cents - (prev.catsDetalhe[g.category] || 0) : 0;
       const eff = Math.max(g.limit_cents + carry, 0);
-      const spent = cur.cats[g.category] || 0;
+      const spent = cur.catsDetalhe[g.category] || 0;
       return { ...g, eff, carry, spent, saldo: eff - spent };
     });
     return { cur, prev, prevYm, catRows, budget };
-  }, [txs, mes, goals]);
+  }, [txs, mes, goals, catList]);
 
   if (!data) return <div className="container"><div className="loading">{t('common.loading')}</div></div>;
   const { cur, prev, prevYm, catRows, budget } = data;

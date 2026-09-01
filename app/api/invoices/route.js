@@ -3,6 +3,7 @@ import { t } from '@/lib/i18n';
 import { getDb, categoryColors, ACTIVE_TX } from '@/lib/db';
 import { installmentOf, invoicePaymentRef } from '@/lib/parsers/labels';
 import { quitacoesDo, sugerirPagamento, statusDaFatura } from '@/lib/quitacao';
+import { localIsoDate } from '@/lib/insights';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,13 @@ function refOf(dateIso, closingDay, shiftMonths = 0) {
   if (shiftMonths) [y, m] = addMonthsYm(y, m, shiftMonths);
   if (d > closingDay) [y, m] = addMonthsYm(y, m, 1);
   return `${y}-${pad(m)}`;
+}
+
+// A competência da fatura pertence ao calendário de quem usa o cartão, não ao
+// UTC. Às 21h no Brasil, `toISOString()` já pode ser o dia seguinte e avançar
+// uma fatura que ainda está aberta. Aceitar `now` torna essa borda testável.
+export function currentInvoiceRef(closingDay, now = new Date()) {
+  return refOf(localIsoDate(now), closingDay);
 }
 
 export async function GET(request) {
@@ -76,8 +84,7 @@ export async function GET(request) {
     inv.by_category[tx.category] = (inv.by_category[tx.category] || 0) - tx.amount_cents;
   }
 
-  const now = new Date();
-  const curRef = refOf(now.toISOString().slice(0, 10), card.closing_day);
+  const curRef = currentInvoiceRef(card.closing_day);
 
   // Quitações afirmadas pelo usuário. Elas têm precedência sobre a inferência:
   // ver statusDaFatura em lib/quitacao.js.

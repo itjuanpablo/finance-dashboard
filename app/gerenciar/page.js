@@ -9,6 +9,7 @@ import { t, tn } from '@/lib/i18n';
 import { CAT } from '@/lib/categories';
 import { CURRENCIES } from '@/lib/config';
 import { stripInstallment } from '@/lib/parsers/labels';
+import { ordenarComFilhos, opcoesDeCategoria } from '@/lib/arvore-categorias';
 import {
   fmtMoney, fmtDate, fmtMonthLong, currencySymbol, currencyCode, fmtMoneyIn, parseAmountToCents,
 } from '@/lib/format';
@@ -206,7 +207,7 @@ export default function Gerenciar() {
                           await api('/api/rules', 'POST', { pattern: r.pattern, category: e.target.value });
                           await loadAll();
                         }}>
-                        {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                        {opcoesDeCategoria(activeCats).map(o => <option key={o.key} value={o.key}>{o.texto}</option>)}
                       </select>
                       <button className="danger-btn" onClick={async () => {
                         await api('/api/rules', 'DELETE', { id: r.id });
@@ -353,7 +354,7 @@ function Lancamentos({ txs, colors, activeCats, labelOf, accounts, toast, reload
         </select>
         <select className="control" value={cat} onChange={e => setCat(e.target.value)}>
           <option value="">{t('filter.allCategories')}</option>
-          {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+          {opcoesDeCategoria(activeCats).map(o => <option key={o.key} value={o.key}>{o.texto}</option>)}
         </select>
         <select className="control" value={type} onChange={e => setType(e.target.value)}>
           <option value="">{t('filter.allTypes')}</option>
@@ -421,7 +422,7 @@ function Lancamentos({ txs, colors, activeCats, labelOf, accounts, toast, reload
                         createRule: tx.category === CAT.TO_REVIEW,
                         pattern: stripInstallment(tx.description),
                       }, { category: tx.category }, t('manage.catChanged', { cat: labelOf(e.target.value) }))}>
-                      {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                      {opcoesDeCategoria(activeCats).map(o => <option key={o.key} value={o.key}>{o.texto}</option>)}
                     </select>
                   </td>
                   <td className={`amount ${tx.transfer ? 'trf' : tx.amount_cents > 0 ? 'in' : 'out'}`}>
@@ -459,7 +460,7 @@ function Lancamentos({ txs, colors, activeCats, labelOf, accounts, toast, reload
           <b>{tn(selected.size, 'manage.selected')}</b>
           <select className="control" value={bulkCat} onChange={e => setBulkCat(e.target.value)}>
             <option value="">{t('manage.bulkCat')}</option>
-            {activeCats.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+            {opcoesDeCategoria(activeCats).map(o => <option key={o.key} value={o.key}>{o.texto}</option>)}
           </select>
           <button className="hbtn" style={{ height: 30 }} disabled={!bulkCat}
             onClick={() => bulkCat && bulk('category', bulkCat, labelOf(bulkCat))}>{t('common.apply')}</button>
@@ -482,8 +483,14 @@ function Categorias({ cats, toast, reload }) {
   const [moveTo, setMoveTo] = useState('');
   const [adding, setAdding] = useState(false);
 
-  const active = cats.filter(c => !c.archived);
+  const active = ordenarComFilhos(cats.filter(c => !c.archived));
   const archived = cats.filter(c => c.archived);
+
+  // Quem pode ser mãe: ativa, não é do sistema, não é filha de ninguém, e não
+  // é a própria categoria em edição. As mesmas regras de problemaComPai — mas
+  // aqui elas somem da lista em vez de virar erro depois do clique.
+  const possiveisPais = cats.filter(c =>
+    !c.archived && !c.system && !c.parent_key && c.id !== editing);
 
   const save = async () => {
     const d = await api('/api/categories', editing === 'new' ? 'POST' : 'PATCH',
@@ -494,7 +501,20 @@ function Categorias({ cats, toast, reload }) {
     await reload();
   };
 
-  const Editor = () => (
+  // ─── Por que isto é uma VARIÁVEL e não um componente ───────────────────────
+  // Era `const Editor = () => (…)`, definido aqui dentro. A cada tecla o estado
+  // mudava, esta função era recriada, e o React via um TIPO DE COMPONENTE NOVO
+  // — então desmontava o campo e montava outro no lugar, com um <input> novo em
+  // folha.
+  //
+  // Trocar o nó do input entre uma tecla e outra quebra os ACENTOS: no teclado,
+  // "í" é composto em dois tempos (´ e depois i), e essa composição vive no
+  // elemento do DOM. Com o elemento destruído no meio, o navegador desiste e
+  // grava o acento como caractere solto — era daí que saía "Fam'ilia".
+  //
+  // Como valor JSX, não há tipo novo: o React reconcilia o mesmo <input> e a
+  // composição sobrevive. Nunca defina componente dentro de componente.
+  const editorCategoria = (
     <div className="cat-editor">
       <div className="btn-row">
         <input style={{ width: 54, textAlign: 'center' }} placeholder="🏷" maxLength={4}
@@ -509,6 +529,20 @@ function Categorias({ cats, toast, reload }) {
             style={{ background: c }} onClick={() => setDraft(x => ({ ...x, color: c }))} />
         ))}
       </div>
+      {/* Só aparece se houver mãe possível. Um seletor com uma opção só
+          ("nenhuma") é ruído pedindo atenção sem oferecer escolha. */}
+      {possiveisPais.length > 0 && (
+        <div className="btn-row" style={{ alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.parentLabel')}</span>
+          <select className="control" style={{ flex: 1 }} value={draft.parent_key ?? ''}
+            onChange={e => setDraft(x => ({ ...x, parent_key: e.target.value || null }))}>
+            <option value="">{t('manage.parentNone')}</option>
+            {possiveisPais.map(c => (
+              <option key={c.key} value={c.key}>{c.emoji} {c.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="btn-row end">
         <button className="hbtn" onClick={() => { setEditing(null); setAdding(false); }}>{t('common.cancel')}</button>
         <button className="hbtn" style={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
@@ -527,22 +561,30 @@ function Categorias({ cats, toast, reload }) {
         }}>+ {t('manage.newCat')}</button>
       </div>
       <div className="panel-body">
-        {adding && editing === 'new' && <Editor />}
+        {adding && editing === 'new' && editorCategoria}
         {active.map(c => (
           <div key={c.id}>
-            <div className="list-row">
+            {/* `nivel` vem de ordenarComFilhos: 0 no topo, 1 na subcategoria.
+                A indentação é a única pista visual de hierarquia — sem ela, a
+                lista fica plana e o pai vira só mais uma linha. */}
+            <div className="list-row" style={c.nivel ? { paddingLeft: 26 } : undefined}>
+              {c.nivel > 0 && <span className="sub-mark" aria-hidden="true">└</span>}
               <span className="dot" style={{ background: c.color, width: 10, height: 10 }} />
               <span style={{ width: 24, textAlign: 'center' }}>{c.emoji}</span>
               <div className="grow">
                 <div style={{ fontWeight: 500 }}>{c.label}{c.system && <span style={{ color: 'var(--muted)', fontSize: 11, marginLeft: 6 }}>({t('manage.systemTag')})</span>}</div>
                 <div className="sub">
                   {tn(c.txCount, 'manage.txCount')}{c.monthlyAvg > 0 ? ` · ${t('manage.perMonth', { v: fmtMoney(c.monthlyAvg) })}` : ''}{c.rulesCount ? ` · ${tn(c.rulesCount, 'manage.rulesCount')}` : ''}
+                  {(() => {
+                    const n = cats.filter(x => x.parent_key === c.key && !x.archived).length;
+                    return n ? ` · ${tn(n, 'manage.subCount')}` : '';
+                  })()}
                 </div>
               </div>
               <button className="hbtn" style={{ height: 30 }} onClick={() => {
                 setEditing(c.id); setAdding(false);
                 // parte do nome visível: renomear canônica desliga a tradução (v4)
-                setDraft({ name: c.label, color: c.color, emoji: c.emoji });
+                setDraft({ name: c.label, color: c.color, emoji: c.emoji, parent_key: c.parent_key ?? null });
               }}>{t('common.edit')}</button>
               {!c.system && (
                 <>
@@ -556,7 +598,7 @@ function Categorias({ cats, toast, reload }) {
                 </>
               )}
             </div>
-            {editing === c.id && <Editor />}
+            {editing === c.id && editorCategoria}
             {deleting === c.id && (
               <div className="cat-editor" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13 }}>
@@ -642,7 +684,9 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
     await reload();
   };
 
-  const SourcePicker = () => (
+  // Valor JSX, não componente — mesma razão de `editorCategoria` acima:
+  // componente definido dentro de componente é remontado a cada tecla.
+  const seletorOrigens = (
     <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 12, color: 'var(--muted)' }}>{t('manage.linkedSources')}</span>
       {knownSources.map(s => (
@@ -734,7 +778,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                   onChange={e => setDraft(x => ({ ...x, initial: e.target.value }))} />
                 <input type="date" value={draft.initial_date ?? ''}
                   onChange={e => setDraft(x => ({ ...x, initial_date: e.target.value }))} />
-                <SourcePicker />
+                {seletorOrigens}
               </div>
               <div className="btn-row end">
                 <button className="hbtn" onClick={() => setEditAcc(null)}>{t('common.cancel')}</button>
@@ -810,7 +854,7 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
                   onChange={e => setDraft(x => ({ ...x, closing_day: e.target.value }))} />
                 <input type="number" min={1} max={28} placeholder={t('manage.dueDay')} value={draft.due_day ?? ''}
                   onChange={e => setDraft(x => ({ ...x, due_day: e.target.value }))} />
-                <SourcePicker />
+                {seletorOrigens}
               </div>
               <div className="btn-row end">
                 <button className="hbtn" onClick={() => setEditCard(null)}>{t('common.cancel')}</button>

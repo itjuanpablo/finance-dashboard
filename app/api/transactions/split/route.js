@@ -84,9 +84,9 @@ export async function POST(request) {
     const ins = db.prepare(`
       INSERT INTO transactions
         (date, description, amount_cents, category, transfer, source, external_id,
-         hash, batch_id, account_id, invoice_ref, parent_id)
+         hash, batch_id, account_id, invoice_ref, currency, parent_id)
       VALUES (@date, @description, @amount_cents, @category, @transfer, @source, NULL,
-              @hash, @batch_id, @account_id, @invoice_ref, @parent_id)`);
+              @hash, @batch_id, @account_id, @invoice_ref, @currency, @parent_id)`);
 
     limpas.forEach((p, i) => {
       ins.run({
@@ -105,6 +105,11 @@ export async function POST(request) {
         batch_id: tx.batch_id,
         account_id: tx.account_id,
         invoice_ref: tx.invoice_ref,
+        // A divisão só reorganiza uma compra; mudar a moeda faria partes em
+        // USD passarem a parecer dinheiro da instalação e contaminarem os
+        // totais em BRL. A moeda do pai é, portanto, parte da identidade da
+        // transação e precisa atravessar intacta para cada parte.
+        currency: tx.currency,
         parent_id: tx.id,
       });
     });
