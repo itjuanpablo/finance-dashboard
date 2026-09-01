@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { computeInsights, localIsoDate, localIsoMonth } from '@/lib/insights';
 import RevisaoMassa from '@/components/RevisaoMassa';
+import ResumoPainel from '@/components/ResumoPainel';
+import FechamentoMensal from '@/components/FechamentoMensal';
 import EstadoVazio from '@/components/EstadoVazio';
 import AcoesCabecalho from '@/components/AcoesCabecalho';
 import LancamentoRapido from '@/components/LancamentoRapido';
@@ -11,7 +13,7 @@ import { CAT, NON_BUDGET_CATEGORIES } from '@/lib/categories';
 import { dobrar, apenasRaizes, ordenarComFilhos } from '@/lib/arvore-categorias';
 import { stripInstallment as stripParcela, installmentOf } from '@/lib/parsers/labels';
 import {
-  fmtMoney, fmtMoneyIn, fmtDayMonth, fmtMonthLong, fmtMonthShort,
+  fmtMoney, fmtDayMonth, fmtMonthLong, fmtMonthShort,
   currencySymbol, parseAmountToCents,
 } from '@/lib/format';
 
@@ -37,6 +39,7 @@ export default function Dashboard() {
   const [batches, setBatches] = useState([]);
   const [dismissed, setDismissed] = useState(null); // null até hidratar
   const [showReview, setShowReview] = useState(false);
+  const [showMonthlyReview, setShowMonthlyReview] = useState(false);
   const [emojis, setEmojis] = useState({});
   const [quickAdd, setQuickAdd] = useState(null); // 'despesa' | 'receita' | null
   const [userName, setUserName] = useState('');
@@ -557,42 +560,9 @@ export default function Dashboard() {
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
 
-      <div className="cards">
-        <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--green)' }} />{t('dash.income')}</div>
-          <div className="card-value pos">{fmtMoney(summary.totIn)}</div>
-          <div className="card-sub">{tn(summary.nIn, 'import.tx')}</div>
-        </div>
-        <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--red)' }} />{t('dash.expenses')}</div>
-          <div className="card-value neg">{fmtMoney(summary.totOut)}</div>
-          <div className="card-sub">{tn(summary.nOut, 'import.tx')}</div>
-        </div>
-        <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--accent)' }} />{t('dash.balance')}</div>
-          <div className={`card-value ${summary.bal >= 0 ? 'pos' : 'neg'}`}>{fmtMoney(summary.bal)}</div>
-          <div className="card-sub">{t('dash.balanceSub')}</div>
-          {/* Moeda estrangeira aparece SEPARADA, embaixo do saldo, com o próprio
-              símbolo. Não é somada nem convertida: o extrato da conta em dólar
-              não traz cotação, e aplicar a de hoje a um gasto de julho daria um
-              número que nunca existiu. Dois números dizem a verdade; um só
-              exigiria inventar a taxa. */}
-          {outrasMoedas.map(m => (
-            <div key={m.moeda} className="card-sub" style={{ marginTop: 6, color: 'var(--text)' }}>
-              <b>{fmtMoneyIn(m.entrada - m.saida, m.moeda)}</b>{' '}
-              <span style={{ color: 'var(--muted)' }}>{t('dash.otherCurrency', { n: m.n })}</span>
-            </div>
-          ))}
-        </div>
-        <div className="card">
-          <div className="card-label"><span className="dot" style={{ background: 'var(--amber)' }} />{t('dash.projection')}</div>
-          <div className="card-value">{summary.proj != null ? fmtMoney(summary.proj) : '—'}</div>
-          <div className="card-sub">
-            {summary.proj != null ? t('dash.projSub') : t('dash.projNA')}
-            {future.months.length > 0 && summary.proj != null ? ` · ${t('dash.projInstallments')}` : ''}
-          </div>
-        </div>
-      </div>
+      <ResumoPainel summary={summary} outrasMoedas={outrasMoedas} future={future}
+        reviewCount={reviewCount} upcomingBills={upcomingBills}
+        onReview={() => setShowReview(true)} onMonthlyReview={() => setShowMonthlyReview(true)} />
 
       {insights.length > 0 && (
         <div className="insights-row">
@@ -809,7 +779,7 @@ export default function Dashboard() {
           <div className="panel-head" style={{ paddingBottom: 14 }}>
             <h2>{t('dash.transactions')} <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 13 }}>· {rows.length}</span></h2>
             {reviewCount > 0 && (
-              <button style={{ border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--amber)', borderRadius: 10, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}
+              <button className="review-shortcut"
                 title={t('review.buttonTitle')}
                 onClick={() => setShowReview(true)}>
                 ⚠ {t('dash.toReviewBtn', { n: reviewCount })}
@@ -829,8 +799,13 @@ export default function Dashboard() {
               <option value="trf">{t('cat.transfers')}</option>
               <option value="review">{t('cat.to_review')}</option>
             </select>
+            {(search || catFilter || typeFilter) && (
+              <button className="clear-filters" onClick={() => {
+                setSearch(''); setCatFilter(''); setTypeFilter('');
+              }}>{t('filter.clear')}</button>
+            )}
           </div>
-          <div style={{ overflowX: 'auto' }}>
+          <div className="transaction-table-wrap">
             <table>
               <thead><tr><th>{t('common.date')}</th><th>{t('common.description')}</th><th>{t('common.category')}</th><th style={{ textAlign: 'right' }}>{t('common.value')}</th></tr></thead>
               <tbody>
@@ -964,6 +939,12 @@ export default function Dashboard() {
             else toast(r.msg, '🧠');
             await load();
           }} />
+      )}
+
+      {showMonthlyReview && (
+        <FechamentoMensal reviewCount={reviewCount} upcomingBills={upcomingBills} emojis={emojis}
+          onClose={() => setShowMonthlyReview(false)}
+          onReview={() => setShowReview(true)} onPayBill={payBill} />
       )}
 
       <div className="toasts">

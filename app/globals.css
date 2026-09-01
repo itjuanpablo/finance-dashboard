@@ -97,6 +97,12 @@ header {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
 }
+.balance-card {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: linear-gradient(135deg, var(--surface) 55%, var(--accent-soft));
+}
+.balance-card .card-value { font-size: 29px; }
+.projection-card { background: linear-gradient(135deg, var(--surface), color-mix(in srgb, var(--amber) 8%, var(--surface))); }
 .card-label { font-size: 12.5px; color: var(--muted); font-weight: 500; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
 .card-value { font-size: 25px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
 .card-value.pos { color: var(--green); }
@@ -168,6 +174,13 @@ select.control {
      comportamento nativo e o custo certo a pagar. */
   max-width: 100%; min-width: 0;
 }
+.clear-filters {
+  border: 0; background: none; color: var(--accent); cursor: pointer;
+  padding: 6px 4px; font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.clear-filters:hover { text-decoration: underline; }
+.transaction-table-wrap { overflow: auto; max-height: 640px; }
+.transaction-table-wrap thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 table { width: 100%; border-collapse: collapse; }
 thead th {
   text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
@@ -326,7 +339,7 @@ tbody tr:hover { background: var(--surface-2); }
 .danger-btn:hover { border-color: var(--red); }
 
 /* ── Página Gerenciar ───────────────────── */
-.manage-layout { display: flex; gap: 16px; align-items: start; }
+.manage-layout { display: flex; gap: 16px; align-items: flex-start; }
 .manage-side {
   /* 172px cabia "Contas a pagar" e não cabe "Facturas y servicios" — de novo a
      largura calibrada por palavra. 200px cobre os rótulos das duas línguas com
@@ -574,6 +587,49 @@ tr:hover .cell-editable { border-bottom-color: var(--border); }
 }
 .insight-x:hover { background: var(--surface-2); color: var(--text); }
 
+/* ── Próximos passos ───────────────────── */
+.action-tray {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 16px; margin: -8px 0 20px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); flex-wrap: wrap;
+}
+.action-tray-title { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 700; }
+.action-tray-title small { color: var(--muted); font-size: 12px; font-weight: 400; }
+.action-tray-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.attention-btn {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border)); border-radius: 10px;
+  background: color-mix(in srgb, var(--amber) 9%, var(--surface)); color: var(--text);
+  cursor: pointer; text-decoration: none; font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.attention-btn.neutral { border-color: var(--border); background: var(--surface-2); }
+.attention-btn.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+.attention-btn.primary .attention-arrow { color: rgba(255,255,255,.75); }
+.attention-btn:hover { border-color: var(--accent); }
+.attention-arrow { color: var(--muted); margin-left: 2px; }
+.review-shortcut {
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  background: color-mix(in srgb, var(--amber) 9%, var(--surface)); color: var(--amber);
+  border-radius: 10px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+}
+.monthly-review { max-width: 650px; }
+.monthly-group { margin-top: 8px; }
+.monthly-group > h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 4px; }
+.monthly-step {
+  display: flex; align-items: center; gap: 12px; padding: 14px 0;
+  border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.monthly-step.compact { padding: 11px 0; }
+.monthly-step:last-child { border-bottom: 0; }
+.monthly-step h4, .monthly-step strong { font-size: 13.5px; font-weight: 650; }
+.monthly-step p { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.monthly-step-icon {
+  width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center;
+  border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 700;
+}
+.monthly-step-icon.amber { color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, var(--surface)); }
+.monthly-step-icon.red { color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--surface)); }
+
 /* ── Página Cartões / Faturas ───────────── */
 .inv-nav {
   display: flex; align-items: center; justify-content: space-between;
@@ -764,6 +820,7 @@ tbody tr td { transition: background .12s; }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
   .card { padding: 13px; }
   .card-value { font-size: 18px; }
+  .balance-card .card-value { font-size: 22px; }
   .card-sub { font-size: 11px; }
   .insights-row { grid-template-columns: 1fr; gap: 8px; margin-bottom: 18px; }
 
@@ -780,6 +837,11 @@ tbody tr td { transition: background .12s; }
      coerente mesmo quando o container está errado. */
   .filters .control { flex: 1 1 calc(50% - 4px); min-width: 0; }
   .filters .search { flex: 1 1 100%; min-width: 0; }
+  .filters .clear-filters { flex: 1 1 100%; text-align: right; padding: 0 4px; }
+  .transaction-table-wrap { max-height: none; }
+  .action-tray { margin: -4px 0 16px; padding: 12px; gap: 10px; }
+  .action-tray-actions { width: 100%; }
+  .attention-btn { flex: 1; justify-content: center; }
   thead th { padding: 10px 10px; }
   tbody td { padding: 10px 10px; font-size: 13px; }
   .desc small { display: none; }
