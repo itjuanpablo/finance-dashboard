@@ -12,12 +12,29 @@ async function sha256(text) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+async function strongHash(pin, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: 210000 }, key, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function newPinHash(pin) {
+  const salt = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+  return `v2$${salt}$${await strongHash(pin, salt)}`;
+}
+async function matchesPin(pin, stored) {
+  if (stored?.startsWith('v2$')) {
+    const [, salt, digest] = stored.split('$');
+    return Boolean(salt && digest) && await strongHash(pin, salt) === digest;
+  }
+  return await sha256(pin) === stored;
+}
+
 export async function configurePin() {
   const current = localStorage.getItem('fluxo-pin');
   if (current) {
     const check = prompt(t('pin.promptCurrent'));
     if (check === null) return null;
-    if (await sha256(check) !== current) return t('pin.wrongCurrent');
+    if (!await matchesPin(check, current)) return t('pin.wrongCurrent');
   }
   const next = prompt(t('pin.promptNew'));
   if (next === null) return null;
@@ -27,7 +44,7 @@ export async function configurePin() {
     return t('pin.removed');
   }
   if (!/^\d{4,8}$/.test(next)) return t('pin.lengthRule');
-  localStorage.setItem('fluxo-pin', await sha256(next));
+  localStorage.setItem('fluxo-pin', await newPinHash(next));
   sessionStorage.setItem('fluxo-unlocked', '1');
   return t('pin.set');
 }
@@ -45,8 +62,27 @@ export default function PinGate({ children }) {
     } catch { setState('open'); }
   }, []);
 
+  useEffect(() => {
+    if (state !== 'open' || !localStorage.getItem('fluxo-pin')) return;
+    let timer;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        sessionStorage.removeItem('fluxo-unlocked');
+        setPin(''); setState('locked');
+      }, 15 * 60 * 1000);
+    };
+    const events = ['pointerdown', 'keydown', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, arm));
+    document.addEventListener('visibilitychange', arm);
+    arm();
+    return () => { clearTimeout(timer); events.forEach(event => window.removeEventListener(event, arm)); document.removeEventListener('visibilitychange', arm); };
+  }, [state]);
+
   async function tryUnlock(value) {
-    if (await sha256(value) === localStorage.getItem('fluxo-pin')) {
+    const stored = localStorage.getItem('fluxo-pin');
+    if (await matchesPin(value, stored)) {
+      if (!stored.startsWith('v2$')) localStorage.setItem('fluxo-pin', await newPinHash(value));
       sessionStorage.setItem('fluxo-unlocked', '1');
       setState('open');
     } else {

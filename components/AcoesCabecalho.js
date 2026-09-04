@@ -52,11 +52,15 @@ export default function AcoesCabecalho({ children, pin = false }) {
       <SeletorIdioma />
 
       {pin && (
-        <button className="theme-toggle" title={t('pin.configTitle')}
-          onClick={async () => {
-            const msg = await configurePin();
-            if (msg) alert(msg);
-          }}>🔒</button>
+        <>
+          <button className="theme-toggle" title={t('pin.configTitle')}
+            onClick={async () => {
+              const msg = await configurePin();
+              if (msg) alert(msg);
+            }}>🔒</button>
+          <button className="theme-toggle" title={t('pin.lockNow')}
+            onClick={() => { sessionStorage.removeItem('fluxo-unlocked'); window.location.reload(); }}>⏻</button>
+        </>
       )}
 
       <button className="theme-toggle" title={t('common.privacyTitle')}

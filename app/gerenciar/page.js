@@ -23,6 +23,7 @@ const TABS = [
   ['apagar', '📅', 'bills.title'],
   ['regras', '🧠', 'manage.tab.rules'],
   ['importacoes', '🗂', 'import.batches'],
+  ['backups', '💾', 'Backups'],
 ];
 
 let toastId = 0;
@@ -77,9 +78,11 @@ export default function Gerenciar() {
   const [cats, setCats] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [knownSources, setKnownSources] = useState([]);
+  const [transferSuggestions, setTransferSuggestions] = useState([]);
   const [cards, setCards] = useState([]);
   const [rules, setRules] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [backups, setBackups] = useState([]);
   const [toasts, setToasts] = useState([]);
 
   const toast = (msg, ico = '✓', undoFn = null, err = false) => {
@@ -89,19 +92,21 @@ export default function Gerenciar() {
   };
 
   async function loadAll() {
-    const [tx, c, a, cd, r, b] = await Promise.all([
+    const [tx, c, a, cd, r, b, bk] = await Promise.all([
       fetch('/api/transactions').then(x => x.json()),
       fetch('/api/categories').then(x => x.json()),
       fetch('/api/accounts').then(x => x.json()),
       fetch('/api/cards').then(x => x.json()),
       fetch('/api/rules').then(x => x.json()),
       fetch('/api/batches').then(x => x.json()),
+      fetch('/api/backups').then(x => x.json()),
     ]);
     setTxs(tx.transactions); setColors(tx.categories);
     setCats(c.categories);
-    setAccounts(a.accounts); setKnownSources(a.knownSources);
+    setAccounts(a.accounts); setKnownSources(a.knownSources); setTransferSuggestions(a.transferSuggestions || []);
     setCards(cd.cards);
     setRules(r.rules); setBatches(b.batches);
+    setBackups(bk.backups || []);
   }
 
   useEffect(() => {
@@ -177,7 +182,7 @@ export default function Gerenciar() {
             <Categorias cats={cats} toast={toast} reload={loadAll} />
           )}
           {secao === 'contas' && (
-            <Contas accounts={accounts} cards={cards} knownSources={knownSources}
+            <Contas accounts={accounts} cards={cards} knownSources={knownSources} transferSuggestions={transferSuggestions}
               toast={toast} reload={loadAll} />
           )}
           {secao === 'apagar' && (
@@ -219,6 +224,7 @@ export default function Gerenciar() {
               </div>
             </div>
           )}
+          {secao === 'backups' && <Backups backups={backups} toast={toast} reload={loadAll} />}
           {secao === 'importacoes' && (
             <div className="panel">
               <div className="panel-head" style={{ paddingBottom: 12 }}>
@@ -645,7 +651,28 @@ function Categorias({ cats, toast, reload }) {
 }
 
 // ═══ Contas & Cartões ══════════════════════════════════
-function Contas({ accounts, cards, knownSources, toast, reload }) {
+function Backups({ backups, toast, reload }) {
+  const restore = async backup => {
+    const warning = `Restaurar ${backup.name}?\n\nOs dados atuais serão substituídos. O Fluxo criará uma cópia de segurança antes de continuar.`;
+    if (!confirm(warning)) return;
+    const data = await api('/api/backups', 'POST', { name: backup.name });
+    if (data.error) return toast(data.error, '⚠️', null, true);
+    toast(`Backup restaurado. A cópia anterior foi salva como ${data.safetyBackup}.`, '💾');
+    await reload();
+    window.location.assign('/');
+  };
+  return <div className="panel">
+    <div className="panel-head" style={{ paddingBottom: 12 }}><div><h2>Backups</h2><p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Cópias locais geradas antes de importações e mudanças sensíveis. Restaurar substitui os dados atuais, mas cria uma cópia deles antes.</p></div></div>
+    <div className="panel-body">
+      {backups.length === 0 ? <div className="empty">Ainda não há backups disponíveis.</div> : backups.map(backup => <div className="list-row" key={backup.name}>
+        <div className="grow"><b>{backup.name}</b><div className="sub">{new Date(backup.modifiedAt).toLocaleString()} · {(backup.bytes / 1024).toFixed(1)} KB</div></div>
+        <button className="danger-btn" onClick={() => restore(backup)}>Restaurar</button>
+      </div>)}
+    </div>
+  </div>;
+}
+
+function Contas({ accounts, cards, knownSources, transferSuggestions, toast, reload }) {
   const [editAcc, setEditAcc] = useState(null); // id | 'new' | null
   const [editCard, setEditCard] = useState(null);
   const [draft, setDraft] = useState({});
@@ -786,6 +813,26 @@ function Contas({ accounts, cards, knownSources, toast, reload }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <div className="panel-head" style={{ paddingBottom: 12 }}>
+          <div><h2>Possíveis transferências entre contas</h2><p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>Valores opostos de contas diferentes, em até dois dias. Confirme apenas quando reconhecer a transferência.</p></div>
+        </div>
+        <div className="panel-body">
+          {transferSuggestions.length === 0 ? <div className="empty">Nenhuma transferência pendente de conferência.</div> : transferSuggestions.map(s => {
+            const from = accounts.find(a => a.id === s.out_account_id)?.name || 'Conta';
+            const to = accounts.find(a => a.id === s.in_account_id)?.name || 'Conta';
+            return <div className="list-row" key={`${s.out_id}-${s.in_id}`}>
+              <div className="grow"><b>{from} → {to}</b><div className="sub">{s.out_date} · {s.out_description} / {s.in_description}</div></div>
+              <strong>{fmtMoney(s.amount_cents)}</strong>
+              <button className="hbtn" style={{ height: 28, fontSize: 12 }} onClick={async () => {
+                await Promise.all([api('/api/transactions', 'PATCH', { id: s.out_id, transfer: true }), api('/api/transactions', 'PATCH', { id: s.in_id, transfer: true })]);
+                toast('Transferência confirmada; ela não entra mais em receitas ou despesas.', '↔'); await reload();
+              }}>Confirmar</button>
+            </div>;
+          })}
         </div>
       </div>
 

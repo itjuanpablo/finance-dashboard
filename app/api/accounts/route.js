@@ -34,7 +34,26 @@ function accountPayload(db) {
   const knownSources = db.prepare(
     'SELECT DISTINCT source FROM transactions UNION SELECT DISTINCT kind FROM batches')
     .all().map(r => r.source || r.kind).filter(Boolean);
-  return { accounts: enriched, knownSources: [...new Set(knownSources)].sort() };
+  // Sugestões, nunca uma alteração automática: valores iguais em sentidos
+  // opostos podem coincidir por acaso. A pessoa confirma na tela antes de o
+  // lançamento deixar de contar como receita/despesa.
+  const transferSuggestions = db.prepare(`
+    SELECT a.id AS out_id, b.id AS in_id, a.date AS out_date, b.date AS in_date,
+           a.description AS out_description, b.description AS in_description,
+           ABS(a.amount_cents) AS amount_cents, a.account_id AS out_account_id,
+           b.account_id AS in_account_id
+    FROM transactions a JOIN transactions b
+      ON a.amount_cents = -b.amount_cents
+     AND a.account_id <> b.account_id
+     AND a.date BETWEEN date(b.date, '-2 days') AND date(b.date, '+2 days')
+     AND a.id < b.id
+    WHERE ${ACTIVE_TX.replaceAll('has_children', 'a.has_children').replaceAll('deleted_at', 'a.deleted_at')}
+      AND b.deleted_at IS NULL AND b.has_children = 0
+      AND a.transfer = 0 AND b.transfer = 0
+      AND a.account_id IS NOT NULL AND b.account_id IS NOT NULL
+    ORDER BY a.date DESC LIMIT 12
+  `).all();
+  return { accounts: enriched, knownSources: [...new Set(knownSources)].sort(), transferSuggestions };
 }
 
 export async function GET() {

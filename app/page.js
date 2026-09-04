@@ -5,6 +5,8 @@ import { computeInsights, localIsoDate, localIsoMonth } from '@/lib/insights';
 import RevisaoMassa from '@/components/RevisaoMassa';
 import ResumoPainel from '@/components/ResumoPainel';
 import FechamentoMensal from '@/components/FechamentoMensal';
+import CentralImportacao from '@/components/CentralImportacao';
+import SaudeFinanceira from '@/components/SaudeFinanceira';
 import EstadoVazio from '@/components/EstadoVazio';
 import AcoesCabecalho from '@/components/AcoesCabecalho';
 import LancamentoRapido from '@/components/LancamentoRapido';
@@ -40,6 +42,7 @@ export default function Dashboard() {
   const [dismissed, setDismissed] = useState(null); // null até hidratar
   const [showReview, setShowReview] = useState(false);
   const [showMonthlyReview, setShowMonthlyReview] = useState(false);
+  const [showImportHub, setShowImportHub] = useState(false);
   const [emojis, setEmojis] = useState({});
   const [quickAdd, setQuickAdd] = useState(null); // 'despesa' | 'receita' | null
   const [userName, setUserName] = useState('');
@@ -547,7 +550,7 @@ export default function Dashboard() {
 
       <div
         className={`dropzone ${drag ? 'dragover' : ''} ${busy ? 'busy' : ''}`}
-        onClick={() => fileRef.current?.click()}
+        onClick={() => setShowImportHub(true)}
         onDragOver={e => { e.preventDefault(); setDrag(true); }}
         onDragLeave={() => setDrag(false)}
         onDrop={e => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files); }}
@@ -560,9 +563,14 @@ export default function Dashboard() {
         <div className="progress-bar" style={{ width: `${progress}%` }} />
       </div>
 
+      {showImportHub && <CentralImportacao onClose={() => setShowImportHub(false)} onImport={upload} />}
+
       <ResumoPainel summary={summary} outrasMoedas={outrasMoedas} future={future}
         reviewCount={reviewCount} upcomingBills={upcomingBills}
         onReview={() => setShowReview(true)} onMonthlyReview={() => setShowMonthlyReview(true)} />
+
+      <SaudeFinanceira summary={summary} dailyAllowance={dailyAllowance} future={future}
+        upcomingBills={upcomingBills} reviewCount={reviewCount} />
 
       {insights.length > 0 && (
         <div className="insights-row">

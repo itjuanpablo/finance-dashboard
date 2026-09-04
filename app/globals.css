@@ -85,6 +85,39 @@ header {
 .dropzone p { font-size: 13px; color: var(--muted); }
 .dropzone p b { color: var(--accent); font-weight: 600; }
 .dropzone input { display: none; }
+.import-hub { max-width: 700px; max-height: min(760px, calc(100vh - 40px)); }
+.import-hub-body { padding: 18px 20px 20px; }
+.import-eyebrow { display: block; margin-bottom: 5px; color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+.import-guides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.import-guide { display: flex; gap: 10px; min-height: 92px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--surface); transition: border-color .15s, transform .15s; }
+.import-guide:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); transform: translateY(-1px); }
+.import-guide > div { display: grid; align-content: start; gap: 3px; min-width: 0; }
+.import-guide span:not(.import-bank-icon) { color: var(--muted); line-height: 1.35; font-size: 12px; }
+.import-guide small { color: var(--accent); font-weight: 700; font-size: 10.5px; margin-top: 2px; }
+.import-bank-icon { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: var(--accent-soft); font-size: 13px; font-weight: 800; }
+.import-picker { width: 100%; margin-top: 14px; border: 1.5px dashed var(--accent); background: var(--accent-soft); color: var(--accent); border-radius: 12px; padding: 14px; cursor: pointer; font: inherit; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.import-picker:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.import-privacy { margin-top: 8px; text-align: center; color: var(--muted); font-size: 11px; }
+.import-preview { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; font-size: 13px; }
+.import-preview > p, .import-preview > small { color: var(--muted); margin-top: 3px; display: block; }
+.import-sample { margin: 10px 0; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.import-sample > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.import-sample > div:last-child { border-bottom: 0; }
+.import-sample span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.import-error, .import-warning { color: var(--red); font-size: 12px; margin-top: 10px; }
+.import-warning { color: var(--amber); }
+.health-panel { margin: 0 0 24px; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.health-panel .panel-head { padding: 14px 16px 8px; }
+.health-panel .panel-head p { margin-top: 3px; color: var(--muted); font-size: 12px; }
+.health-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--border); }
+.health-item { display: flex; gap: 9px; padding: 13px 15px; border-right: 1px solid var(--border); }
+.health-item:last-child { border-right: 0; }
+.health-icon { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 8px; font-size: 12px; font-weight: 800; background: var(--surface-2); }
+.health-item.good .health-icon { background: color-mix(in srgb, var(--green) 14%, var(--surface)); color: var(--green); }
+.health-item.bad .health-icon { background: color-mix(in srgb, var(--red) 13%, var(--surface)); color: var(--red); }
+.health-item small, .health-item p { display: block; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.health-item strong { display: block; margin: 2px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) { .import-guides { grid-template-columns: 1fr; } .health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .health-item:nth-child(2) { border-right: 0; } .health-item:nth-child(-n+2) { border-bottom: 1px solid var(--border); } }
 .progress-bar {
   position: absolute; left: 0; bottom: 0; height: 3px; width: 0%;
   background: linear-gradient(90deg, var(--accent), #9d6ef4);
